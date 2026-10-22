@@ -14,7 +14,7 @@ const NAV = [
   { href: "/queue", label: "보상 큐", Icon: IconBox },
   { href: "/reviews", label: "후기 관리", Icon: IconStar },
   { href: "/kb", label: "지식베이스", Icon: IconBook },
-  { href: "/finance", label: "재무·안전", Icon: IconShield },
+  { href: "/finance", label: "재무 AI", Icon: IconShield },
 ];
 
 const isActive = (path: string, href: string) => (href === "/" ? path === "/" : path.startsWith(href));

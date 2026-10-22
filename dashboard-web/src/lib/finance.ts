@@ -58,6 +58,17 @@ export interface Verification {
 }
 
 export interface MarketOp { skill: "seller_review" | "settlement_hold"; seller_id: string; decision?: string; status?: string; risk_score?: number | null; reason_code: string; review_id: string | null; at: string }
+export interface LossReport {
+  context_id: string;
+  failed_orders: number | null;
+  affected_customers: number | null;
+  lost_amount: number | null;
+  compensation_coupon_count: number;
+  compensation_total: number;
+  total_loss: number | null;
+  summary: string;
+  at: string;
+}
 export interface Ledger { compensation: { context_id: string; count: number; total: number }[]; refunds: { order_id: string; refunded: number }[] }
 
 export interface Skill { id: string; description: string; grade: "read" | Grade; allowed_requesters: string[]; verifier: string | null; priority: string }
@@ -82,6 +93,7 @@ export const finance = {
   verifications: () => get<Verification[]>(FINANCE_AGENT_URL, "/api/finance/verifications"),
   ledger: () => get<Ledger>(FINANCE_AGENT_URL, "/api/finance/ledger"),
   marketOps: () => get<MarketOp[]>(FINANCE_AGENT_URL, "/api/finance/market-ops"),
+  lossReports: () => get<LossReport[]>(FINANCE_AGENT_URL, "/api/finance/loss-reports"),
   /** C 보류 결정. 사람 토큰만 받는다 (에이전트 토큰은 safety가 거부). */
   decide: async (reviewId: string, decision: "approved" | "rejected", note?: string) => {
     const res = await fetch(`${SAFETY_API_URL}/api/safety/reviews/${reviewId}/decision`, {
