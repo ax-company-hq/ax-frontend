@@ -1,0 +1,27 @@
+{
+  "name": "@ax/planning-web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "기획개발(planning) 부서 화면 — 고객사 업무 시스템의 기획개발팀 탭 (목 데이터 시연판)",
+  "scripts": {
+    "dev": "vite",
+    "dev:depts": "vite --port 3003",
+    "bus": "node server/mock-bus.mjs",
+    "typecheck": "tsc --noEmit -p .",
+    "build": "tsc --noEmit -p . && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@dejafix/common-frontend": "git+https://github.com/DejaFix/common-frontend.git#v0.1.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "typescript": "~6.0.2",
+    "vite": "^8.3.4"
+  }
+}
