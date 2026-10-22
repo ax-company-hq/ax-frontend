@@ -1,0 +1,24 @@
+# 의존성·빌드
+node_modules/
+dist/
+*.tsbuildinfo
+.vite/
+
+# 비밀값
+.env
+.env.*
+!.env.example
+*.local
+
+# 로그
+npm-debug.log*
+*.log
+
+# 에디터·OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Claude Code 개인 설정
+.claude/settings.local.json

@@ -1,0 +1,20 @@
+{
+  "name": "ax-frontend",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "shop-web",
+    "dashboard-web",
+    "types"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev:shop": "npm run dev -w shop-web",
+    "dev:dashboard": "npm run dev -w dashboard-web",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "build": "npm run build --workspaces --if-present",
+    "gen:types": "bash scripts/gen-types.sh"
+  }
+}
