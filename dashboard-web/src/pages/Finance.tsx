@@ -108,6 +108,23 @@ function reasons(r: Review): string[] {
   return out;
 }
 
+const GUIDE_URL = "https://github.com/ax-company-hq/ax-backend/blob/dev/docs/notes/finance/admin-guide.md";
+
+/** 카드마다 붙는 판단 힌트. 자세한 기준은 관리자 사용법 문서. */
+function tipOf(r: Review): string {
+  if (r.report.rules?.some((h) => h.key === "base_grade")) return "정산할 판매자·기간·금액이 맞으면 진행하세요.";
+  switch (r.report.hold_reason) {
+    case "amount_mismatch": return "요청한 AI가 금액을 잘못 적었다는 뜻입니다. 보통 멈추고 담당자에게 알리세요.";
+    case "unregistered_action": return "처음 보는 일입니다. 멈추고 재무 담당자에게 문의하세요.";
+    case "verify_timeout": return "재무 AI가 답하지 않았습니다. 서버가 꺼져 있었다면 멈추세요.";
+    case "over_threshold":
+      if (r.action === "refund_request") return "쇼핑몰 관리 화면에서 주문·결제 금액을 확인한 뒤 결정하세요.";
+      if (r.action === "seller_review") return "판매자 서류와 정보를 본 뒤 결정하세요. 애매하면 멈추세요.";
+      return "아래 '장애로 생긴 손실'과 비교해 보상이 지나치지 않으면 진행하세요.";
+    default: return "애매하면 멈추세요. 멈춘 일은 요청한 AI가 고쳐서 다시 요청할 수 있습니다.";
+  }
+}
+
 function holdTitle(r: Review): string {
   if (r.report.rules?.some((h) => h.key === "base_grade")) return "항상 사람이 확인";
   return WHY_HELD[r.report.hold_reason ?? ""] ?? "확인 필요";
@@ -209,6 +226,18 @@ export default function FinancePage() {
         </div>
       </header>
 
+      <details className="rounded-2xl border border-ink-100 bg-surface px-5 py-3 text-sm">
+        <summary className="cursor-pointer font-semibold text-ink-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500">처음이라면: 관리자가 할 일</summary>
+        <ol className="mt-3 list-decimal space-y-1.5 pl-5 text-ink-700">
+          <li>맨 위 <b>지금 사람이 결정할 일</b>을 봅니다. 대부분의 일은 AI끼리 처리하고, 기준을 넘거나 이상한 건만 여기로 옵니다.</li>
+          <li>카드의 <b>금액</b>과 <b>이유</b>를 읽고, 파란 상자의 <b>이럴 땐</b> 힌트를 참고합니다.</li>
+          <li><b>진행</b> 또는 <b>멈춤</b>을 누릅니다. 애매하면 멈춤을 누르세요. 진행은 되돌릴 수 없고, 멈춘 일은 요청한 AI가 고쳐서 다시 요청할 수 있습니다. 정한 시간 안에 아무도 누르지 않으면 자동으로 멈춥니다.</li>
+        </ol>
+        <p className="mt-3 text-xs text-ink-500">
+          이유별 판단 기준과 자주 묻는 질문은 <a className="font-medium text-brand-700 underline" href={GUIDE_URL} target="_blank" rel="noreferrer">재무 AI 관리자 사용법</a>에 있습니다. 기준 금액을 바꾸고 싶으면 재무 담당자에게 요청하세요.
+        </p>
+      </details>
+
       {(!safetyUp || !financeUp) && (
         <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm font-medium text-red-800">
           {!safetyUp && "안전 장치 서버(8001)가 꺼져 있습니다. "}{!financeUp && "재무 AI 서버(8105)가 꺼져 있습니다. "}
@@ -257,6 +286,7 @@ export default function FinancePage() {
                     <ul className="mt-1 space-y-0.5 text-sm text-ink-700">
                       {reasons(r).map((t) => <li key={t}>{t}</li>)}
                     </ul>
+                    <p className="mt-1.5 rounded-lg bg-brand-50 px-2 py-1 text-xs text-brand-700">이럴 땐: {tipOf(r)}</p>
                     <p className="mt-1 text-xs text-ink-500">
                       {who(r.requester)}가 {ago(r.created_at)} 요청 · <span className={urgent ? "font-semibold text-red-700" : ""}>{duration(left)} 안에 결정하지 않으면 자동 취소</span>
                     </p>
