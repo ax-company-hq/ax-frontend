@@ -74,6 +74,17 @@ export const AI_REVIEWER = "finance-ai";
 export const RULE_REVIEWER = "auto-rule";
 export const isMachine = (by: string | null | undefined) => by === AI_REVIEWER || by === RULE_REVIEWER;
 
+export interface SelfTestCheck { name: string; ok: boolean; detail: string; level: "fail" | "warn" }
+export interface SelfTest {
+  result: "pass" | "warn" | "fail";
+  summary: string;
+  checks: SelfTestCheck[];
+  passed: number;
+  total: number;
+  duration_ms: number;
+  ran_at: string;
+}
+
 export interface Ledger { compensation: { context_id: string; count: number; total: number }[]; refunds: { order_id: string; refunded: number }[] }
 
 export interface Skill { id: string; description: string; grade: "read" | Grade; allowed_requesters: string[]; verifier: string | null; priority: string }
@@ -99,6 +110,9 @@ export const finance = {
   ledger: () => get<Ledger>(FINANCE_AGENT_URL, "/api/finance/ledger"),
   marketOps: () => get<MarketOp[]>(FINANCE_AGENT_URL, "/api/finance/market-ops"),
   lossReports: () => get<LossReport[]>(FINANCE_AGENT_URL, "/api/finance/loss-reports"),
+  /** 재무 AI 테스트 버튼: 가짜 자료로 판단을 점검하고 연결을 확인한다(상태를 바꾸지 않음) */
+  selfTest: () => get<SelfTest>(FINANCE_AGENT_URL, "/api/finance/self-test"),
+  lastSelfTest: () => get<SelfTest | null>(FINANCE_AGENT_URL, "/api/finance/self-test/last"),
   /** C 보류 결정. 사람 토큰만 받는다 (에이전트 토큰은 safety가 거부). */
   decide: async (reviewId: string, decision: "approved" | "rejected", note?: string) => {
     const res = await fetch(`${SAFETY_API_URL}/api/safety/reviews/${reviewId}/decision`, {

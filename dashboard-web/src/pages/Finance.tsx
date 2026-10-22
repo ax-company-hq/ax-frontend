@@ -4,7 +4,7 @@ import { ago, shortDateTime, won } from "@/lib/format";
 import { Link } from "@/lib/nav";
 import {
   AI_REVIEWER, finance, humanTokenSet, isMachine,
-  type AgentCard, type ExecutionRecord, type Ledger, type LossReport, type MarketOp, type Review, type RuleHit, type Thresholds, type Verification,
+  type AgentCard, type ExecutionRecord, type SelfTest, type Ledger, type LossReport, type MarketOp, type Review, type RuleHit, type Thresholds, type Verification,
 } from "@/lib/finance";
 
 // 재무 AI 화면. 서버(safety·finance)가 계산한 숫자를 그대로 보여 주고, 말만 쉽게 바꾼다.
@@ -139,6 +139,43 @@ function Section({ title, hint, children }: { title: string; hint?: string; chil
   );
 }
 
+const TEST_TONE = {
+  pass: { box: "bg-emerald-50 ring-emerald-100 text-emerald-800", label: "정상" },
+  warn: { box: "bg-amber-50 ring-amber-100 text-amber-800", label: "주의" },
+  fail: { box: "bg-red-50 ring-red-100 text-red-800", label: "실패" },
+} as const;
+
+/** 재무 AI 테스트 결과. 버튼을 누른 직후에는 항목을 펼쳐서 보여 준다. */
+function SelfTestPanel({ test, open }: { test: SelfTest; open: boolean }) {
+  const tone = TEST_TONE[test.result];
+  const bad = test.checks.filter((c) => !c.ok);
+  return (
+    <section aria-live="polite" className={`rounded-2xl px-5 py-4 ring-1 ${tone.box}`}>
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <h2 className="text-base font-semibold">재무 AI 테스트: {tone.label}</h2>
+        <p className="text-sm">{test.summary}</p>
+        <p className="ml-auto text-xs opacity-80">{shortDateTime(test.ran_at)} · {test.passed}/{test.total} 통과 · {(test.duration_ms / 1000).toFixed(1)}초</p>
+      </div>
+      {bad.length > 0 && (
+        <ul className="mt-2 space-y-1 text-sm">
+          {bad.map((c) => <li key={c.name}><b>{c.level === "fail" ? "실패" : "주의"}</b> · {c.name}: {c.detail}</li>)}
+        </ul>
+      )}
+      <details className="mt-2 text-sm" open={open}>
+        <summary className="cursor-pointer text-xs font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500">점검한 항목 {test.total}개 모두 보기</summary>
+        <ul className="mt-2 grid gap-1 sm:grid-cols-2">
+          {test.checks.map((c) => (
+            <li key={c.name} className="flex gap-2 rounded-lg bg-surface/70 px-2 py-1 text-ink-700">
+              <span className={`chip shrink-0 ${c.ok ? "bg-emerald-50 text-emerald-700" : c.level === "fail" ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"}`}>{c.ok ? "통과" : c.level === "fail" ? "실패" : "주의"}</span>
+              <span><b className="text-ink-900">{c.name}</b> <span className="text-xs">{c.detail}</span></span>
+            </li>
+          ))}
+        </ul>
+      </details>
+    </section>
+  );
+}
+
 // ---------------------------------------------------------------- 데이터
 interface View {
   card: AgentCard | null;
@@ -193,6 +230,19 @@ export default function FinancePage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [, tick] = useState(0);
+  const [test, setTest] = useState<SelfTest | null>(null);
+  const [testing, setTesting] = useState(false);
+  const [testOpen, setTestOpen] = useState(false);
+
+  useEffect(() => { finance.lastSelfTest().then(setTest).catch(() => undefined); }, []);
+
+  async function runTest() {
+    setTesting(true);
+    setError(null);
+    try { setTest(await finance.selfTest()); setTestOpen(true); }
+    catch { setError("재무 AI 테스트를 실행하지 못했습니다. 재무 AI 서버(8105)가 켜져 있는지 확인하세요."); }
+    finally { setTesting(false); }
+  }
 
   const load = useCallback(() => loadAll().then(setView), []);
   useEffect(() => {
@@ -236,15 +286,25 @@ export default function FinancePage() {
           <h1 className="text-2xl font-bold tracking-tight">재무 AI</h1>
           <p className="mt-1 max-w-2xl text-sm text-ink-500">쿠폰, 환불, 판매자 정산처럼 돈이 나가는 일을 한 번 더 확인합니다. 금액은 AI가 아니라 정해진 계산과 기준으로 판단합니다.</p>
         </div>
-        <div className="ml-auto flex gap-2 text-xs">
+        <div className="ml-auto flex flex-wrap items-center gap-2 text-xs">
+          <button className="btn-primary" onClick={runTest} disabled={testing || !financeUp}>
+            {testing ? "테스트하는 중…" : "재무 AI 테스트"}
+          </button>
           <Chip label={safetyUp ? "안전 장치 켜짐" : "안전 장치 꺼짐"} tone={safetyUp ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"} />
           <Chip label={financeUp ? "재무 AI 켜짐" : "재무 AI 꺼짐"} tone={financeUp ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"} />
         </div>
       </header>
 
+      {test ? <SelfTestPanel test={test} open={testOpen} /> : (
+        <p className="rounded-2xl border border-dashed border-ink-300 px-5 py-3 text-sm text-ink-500">
+          아침에 <b>재무 AI 테스트</b>를 눌러 재무 AI가 제대로 판단하고 연결돼 있는지 확인하세요. 가짜 자료로 점검해서 실제 기록이나 돈에는 영향이 없습니다.
+        </p>
+      )}
+
       <details className="rounded-2xl border border-ink-100 bg-surface px-5 py-3 text-sm">
         <summary className="cursor-pointer font-semibold text-ink-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500">처음이라면: 관리자가 할 일</summary>
         <ol className="mt-3 list-decimal space-y-1.5 pl-5 text-ink-700">
+          <li>아침에 오른쪽 위 <b>재무 AI 테스트</b>를 누릅니다. 초록색이면 정상, 노란색은 연결 확인 필요, 빨간색이면 재무 담당자에게 알립니다.</li>
           <li>맨 위 <b>지금 사람이 결정할 일</b>을 봅니다. 대부분의 일은 재무 AI가 대신 결정하고, 아주 큰 금액이나 판단할 자료가 없는 건만 여기로 옵니다.</li>
           <li>카드의 <b>금액</b>과 <b>이유</b>를 읽고, 파란 상자의 <b>이럴 땐</b> 힌트를 참고합니다.</li>
           <li><b>진행</b> 또는 <b>멈춤</b>을 누릅니다. 애매하면 멈춤을 누르세요. 진행은 되돌릴 수 없고, 멈춘 일은 요청한 AI가 고쳐서 다시 요청할 수 있습니다. 정한 시간 안에 아무도 누르지 않으면 자동으로 멈춥니다.</li>
