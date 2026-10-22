@@ -139,6 +139,10 @@ function Section({ title, hint, children }: { title: string; hint?: string; chil
   );
 }
 
+const TEST_TTL_HOURS = 12; // 서버와 같다. 지난 결과는 믿지 않고 다시 테스트하게 한다
+const freshTest = (t: SelfTest | null) =>
+  t && Date.now() - new Date(t.ran_at).getTime() < TEST_TTL_HOURS * 3600 * 1000 ? t : null;
+
 const TEST_TONE = {
   pass: { box: "bg-emerald-50 ring-emerald-100 text-emerald-800", label: "정상" },
   warn: { box: "bg-amber-50 ring-amber-100 text-amber-800", label: "주의" },
@@ -156,6 +160,13 @@ function SelfTestPanel({ test, open }: { test: SelfTest; open: boolean }) {
         <p className="text-sm">{test.summary}</p>
         <p className="ml-auto text-xs opacity-80">{shortDateTime(test.ran_at)} · {test.passed}/{test.total} 통과 · {(test.duration_ms / 1000).toFixed(1)}초</p>
       </div>
+      {test.result !== "pass" && (
+        <p className="mt-1 text-xs font-medium">
+          {test.result === "fail"
+            ? "테스트를 통과하지 못했습니다. 문제가 해결될 때까지 재무 AI의 결정을 믿고 쓰지 마세요."
+            : "연결 문제가 해결될 때까지 일부 결정이 사람 확인으로 넘어올 수 있습니다."}
+        </p>
+      )}
       {bad.length > 0 && (
         <ul className="mt-2 space-y-1 text-sm">
           {bad.map((c) => <li key={c.name}><b>{c.level === "fail" ? "실패" : "주의"}</b> · {c.name}: {c.detail}</li>)}
@@ -234,7 +245,12 @@ export default function FinancePage() {
   const [testing, setTesting] = useState(false);
   const [testOpen, setTestOpen] = useState(false);
 
-  useEffect(() => { finance.lastSelfTest().then(setTest).catch(() => undefined); }, []);
+  useEffect(() => { finance.lastSelfTest().then((t) => setTest(freshTest(t))).catch(() => undefined); }, []);
+  useEffect(() => {
+    // 화면을 켜 둔 채 12시간이 지나도 지난 결과를 지운다
+    const t = setInterval(() => setTest((cur) => freshTest(cur)), 60_000);
+    return () => clearInterval(t);
+  }, []);
 
   async function runTest() {
     setTesting(true);
@@ -297,7 +313,8 @@ export default function FinancePage() {
 
       {test ? <SelfTestPanel test={test} open={testOpen} /> : (
         <p className="rounded-2xl border border-dashed border-ink-300 px-5 py-3 text-sm text-ink-500">
-          아침에 <b>재무 AI 테스트</b>를 눌러 재무 AI가 제대로 판단하고 연결돼 있는지 확인하세요. 가짜 자료로 점검해서 실제 기록이나 돈에는 영향이 없습니다.
+          최근 {TEST_TTL_HOURS}시간 안에 한 테스트가 없습니다. <b>재무 AI 테스트</b>를 눌러 재무 AI가 제대로 판단하고 연결돼 있는지 확인하세요. 가짜 자료로 점검해서 실제 기록이나 돈에는 영향이 없습니다.
+          <span className="mt-1 block text-xs">테스트를 통과하지 못하면 재무 AI의 결정을 믿고 쓰지 마세요.</span>
         </p>
       )}
 
