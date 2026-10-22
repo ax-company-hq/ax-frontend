@@ -5,6 +5,7 @@ import { AdminShell } from '@/components/admin/AdminShell'
 import Claims from '@/pages/Claims'
 import Console from '@/pages/Console'
 import Dashboard from '@/pages/Dashboard'
+import Finance from '@/pages/Finance'
 import Kb from '@/pages/Kb'
 import Queue from '@/pages/Queue'
 import Reviews from '@/pages/Reviews'
@@ -20,6 +21,7 @@ export function App() {
           <Route path="/queue" element={<Queue />} />
           <Route path="/reviews" element={<Reviews />} />
           <Route path="/kb" element={<Kb />} />
+          <Route path="/finance" element={<Finance />} />
           {/* catbooks 시절 /admin/* 주소 호환 */}
           <Route path="/admin/*" element={<LegacyAdminRedirect />} />
           <Route path="*" element={<Navigate to="/" replace />} />
