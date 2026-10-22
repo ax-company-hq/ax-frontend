@@ -44,7 +44,30 @@ export interface Review {
 }
 
 export interface Rule { key: string; action: string; metric: string; op: string; value: number; field: string | null; allowed: string[]; when: Record<string, unknown> }
-export interface Thresholds { version: number; verify_timeout_seconds: number; review_timeout_seconds: number; rules: Rule[] }
+/** `baseline`: TOML 원래 값. 바꿀 수 있는 기준만 들어 있다 (숫자 규칙 + review_timeout_seconds) */
+export interface Thresholds { version: number; verify_timeout_seconds: number; review_timeout_seconds: number; rules: Rule[]; baseline?: Record<string, number> }
+
+/** 기준 바꾸기 요청 (safety `/api/safety/threshold-changes`). 안전 장치 → 재무 AI → 필요하면 사람 */
+export type ThresholdChangeStatus = "pending" | "applied" | "rejected";
+export interface ThresholdChange {
+  change_id: string;
+  key: string;
+  old_value: number | null;
+  new_value: number;
+  baseline: number | null;
+  reason: string;
+  requested_by: string;
+  status: ThresholdChangeStatus;
+  /** "guardrail"(안전 장치 범위 밖) | "finance-ai" | 사람 이름 */
+  decided_by: string | null;
+  explanation: string;
+  created_at: string;
+  decided_at: string | null;
+  version_after: number | null;
+  ai_review: { result?: "approve" | "reject" | "escalate"; reason_code?: string; explanation?: string };
+  stats: { holds_24h?: number; executed_today?: number; ai_approved_24h?: number; human_approved_24h?: number; expired_24h?: number; action?: string | null };
+}
+export const GUARDRAIL = "guardrail";
 
 export interface Verification {
   execution_id: string;
@@ -99,6 +122,21 @@ async function get<T>(base: string, path: string, raw = false): Promise<T> {
 
 export const humanTokenSet = SAFETY_HUMAN_TOKEN.length > 0;
 
+/** 사람 토큰으로 safety에 POST. 실패하면 서버의 쉬운 말 메시지를 그대로 던진다. */
+async function postHuman<T>(path: string, payload: unknown, failLabel: string): Promise<T> {
+  const res = await fetch(`${SAFETY_API_URL}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${SAFETY_HUMAN_TOKEN}` },
+    body: JSON.stringify(payload),
+  });
+  const body = await res.json().catch(() => null);
+  if (!res.ok) {
+    const message = body?.error?.message ?? (res.status === 422 ? "입력한 값을 확인하세요. 새 값은 정수여야 합니다." : null);
+    throw new ApiError(message ?? `${failLabel} (${res.status})`, res.status);
+  }
+  return body.data as T;
+}
+
 export const finance = {
   safetyHealth: () => get<{ status: string }>(SAFETY_API_URL, "/health"),
   financeHealth: () => get<{ status: string }>(FINANCE_AGENT_URL, "/health"),
@@ -124,4 +162,12 @@ export const finance = {
     if (!res.ok) throw new ApiError(body?.error?.message ?? `결정 실패 (${res.status})`, res.status);
     return body.data as Review;
   },
+  /** 기준 바꾸기 기록 (최근 것부터) */
+  thresholdChanges: () => get<ThresholdChange[]>(SAFETY_API_URL, "/api/safety/threshold-changes"),
+  /** 기준 바꾸기 요청. 안전 장치 범위 밖이면 바로 rejected, 안이면 재무 AI가 결정 (applied/pending/rejected) */
+  requestThresholdChange: (key: string, newValue: number, reason: string) =>
+    postHuman<ThresholdChange>("/api/safety/threshold-changes", { key, new_value: newValue, reason }, "기준 바꾸기 요청 실패"),
+  /** 재무 담당자를 기다리는 기준 바꾸기 승인·거절. 사람 토큰만 */
+  decideThresholdChange: (changeId: string, decision: "approved" | "rejected", note?: string) =>
+    postHuman<ThresholdChange>(`/api/safety/threshold-changes/${changeId}/decision`, { decision, note: note || null }, "결정 실패"),
 };
