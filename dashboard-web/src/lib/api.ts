@@ -1,0 +1,83 @@
+import { ApiError } from "./apiError";
+import type { AdminReview, Claim, ClaimDetail, ClaimStats, Conversation, ConversationListItem, Dashboard, Health, Kpi, Me, QueueRun, QueueView, Summary, Validation } from "./types";
+
+import { DASHBOARD_API_URL } from "./env";
+
+// 상담원 화면 → dashboard-api. 경로 목록은 README의 API 표 참고.
+const BASE = DASHBOARD_API_URL;
+
+export { ApiError };
+
+/** 응답 본문 해석: ax-backend 규약 `{data, meta}`이면 data를, 아니면(catbooks 백엔드) 본문 그대로 쓴다. */
+function unwrap<T>(body: unknown): T {
+  if (body && typeof body === "object" && !Array.isArray(body) && "data" in body && "meta" in body) return (body as { data: T }).data;
+  return body as T;
+}
+
+/** 실패 본문 해석: ax-backend `{error: {code, message}}`와 FastAPI `{detail}` 둘 다 받는다. */
+function toError(body: unknown, status: number): ApiError {
+  const b = (body ?? {}) as { error?: { code?: string; message?: string }; detail?: unknown };
+  if (b.error?.message) return new ApiError(b.error.message, status);
+  const detail = b.detail;
+  if (detail && typeof detail === "object" && "validation" in detail) {
+    const d = detail as { message: string; validation: Validation };
+    return new ApiError(d.message, status, d.validation);
+  }
+  return new ApiError(typeof detail === "string" ? detail : `요청 실패 (${status})`, status);
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    ...init,
+    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    let body: unknown;
+    try {
+      body = await res.json();
+    } catch {
+      /* body was not JSON */
+    }
+    throw toError(body, res.status);
+  }
+  return res.status === 204 ? (undefined as T) : unwrap<T>(await res.json());
+}
+
+const post = <T>(path: string, body?: unknown) =>
+  request<T>(path, { method: "POST", body: body === undefined ? undefined : JSON.stringify(body) });
+
+export const api = {
+  health: () => request<Health>("/api/health"),
+  // 새 문의 만들기에서 가상 고객 목록을 고른다
+  users: () => request<Me[]>("/api/users"),
+
+  // agent console
+  admin: {
+    dashboard: (days = 14) => request<Dashboard>(`/api/admin/dashboard?days=${days}`),
+    kpi: () => request<Kpi>("/api/admin/kpi"),
+    kb: () => request<{ id: string; category: string; title: string; section: string; text: string }[]>("/api/admin/kb"),
+    list: () => request<ConversationListItem[]>("/api/admin/conversations"),
+    get: (id: number) => request<Conversation>(`/api/admin/conversations/${id}`),
+    create: (b: { user_id: number; subject: string; message: string; order_id?: number | null }) => post<Conversation>("/api/admin/conversations", b),
+    customerMessage: (id: number, text: string) => post<Conversation>(`/api/admin/conversations/${id}/customer-messages`, { text }),
+    check: (id: number, text: string) => post<Validation>(`/api/admin/conversations/${id}/check`, { text }),
+    send: (id: number, b: { text: string; draft_style?: string | null; draft_text?: string | null }) =>
+      post<Conversation>(`/api/admin/conversations/${id}/agent-messages`, b),
+    rejectDraft: (id: number, draft_style: string) => post<void>(`/api/admin/conversations/${id}/reject-draft`, { draft_style }),
+    summary: (id: number) => post<Summary>(`/api/admin/conversations/${id}/summary`),
+    setStatus: (id: number, status: string) => post<ConversationListItem>(`/api/admin/conversations/${id}/status`, { status }),
+    orders: (user_id: number) => request<{ id: number; order_no: string; status: string; status_ko: string; title: string }[]>(`/api/admin/orders?user_id=${user_id}`),
+    claims: (status?: string) => request<Claim[]>(`/api/admin/claims${status ? `?status=${status}` : ""}`),
+    claimStats: () => request<ClaimStats>("/api/admin/claims/stats"),
+    claim: (id: number) => request<ClaimDetail>(`/api/admin/claims/${id}`),
+    approve: (id: number, note: string) => post<ClaimDetail>(`/api/admin/claims/${id}/approve`, { note }),
+    reject: (id: number, note: string) => post<ClaimDetail>(`/api/admin/claims/${id}/reject`, { note }),
+    receive: (id: number, inspection: string, note?: string) => post<ClaimDetail>(`/api/admin/claims/${id}/receive`, { inspection, note }),
+    inspect: (id: number, inspection: string, note?: string) => post<ClaimDetail>(`/api/admin/claims/${id}/inspection`, { inspection, note }),
+    queue: () => request<QueueView>("/api/admin/queue"),
+    processQueue: (b: { limit?: number; claim_ids?: number[] } = {}) => post<QueueRun>("/api/admin/queue/process", b),
+    reviews: () => request<AdminReview[]>("/api/admin/reviews"),
+    setReview: (id: number, status: "visible" | "hidden") => post<AdminReview>(`/api/admin/reviews/${id}/status`, { status }),
+  },
+};
