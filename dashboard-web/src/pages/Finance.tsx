@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Loading } from "@/components/admin/bits";
 import { ago, shortDateTime, won } from "@/lib/format";
+import { Link } from "@/lib/nav";
 import {
   finance, humanTokenSet,
   type AgentCard, type ExecutionRecord, type Ledger, type LossReport, type MarketOp, type Review, type RuleHit, type Thresholds, type Verification,
@@ -107,8 +108,6 @@ function reasons(r: Review): string[] {
   if (r.report.hold_reason === "verify_timeout") out.push("재무 AI가 제때 답하지 않아 멈춤");
   return out;
 }
-
-const GUIDE_URL = "https://github.com/ax-company-hq/ax-backend/blob/dev/docs/notes/finance/admin-guide.md";
 
 /** 카드마다 붙는 판단 힌트. 자세한 기준은 관리자 사용법 문서. */
 function tipOf(r: Review): string {
@@ -234,7 +233,7 @@ export default function FinancePage() {
           <li><b>진행</b> 또는 <b>멈춤</b>을 누릅니다. 애매하면 멈춤을 누르세요. 진행은 되돌릴 수 없고, 멈춘 일은 요청한 AI가 고쳐서 다시 요청할 수 있습니다. 정한 시간 안에 아무도 누르지 않으면 자동으로 멈춥니다.</li>
         </ol>
         <p className="mt-3 text-xs text-ink-500">
-          이유별 판단 기준과 자주 묻는 질문은 <a className="font-medium text-brand-700 underline" href={GUIDE_URL} target="_blank" rel="noreferrer">재무 AI 관리자 사용법</a>에 있습니다. 기준 금액을 바꾸고 싶으면 재무 담당자에게 요청하세요.
+          이유별 판단 기준과 자주 묻는 질문은 <Link href="/finance/guide" className="font-medium text-brand-700 underline">재무 AI 관리자 사용법</Link>에 있습니다. 기준 금액을 바꾸고 싶으면 재무 담당자에게 요청하세요.
         </p>
       </details>
 
