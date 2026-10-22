@@ -5,6 +5,7 @@
   "workspaces": [
     "shop-web",
     "dashboard-web",
+    "planning-web",
     "types"
   ],
   "engines": {
@@ -13,6 +14,9 @@
   "scripts": {
     "dev:shop": "npm run dev -w shop-web",
     "dev:dashboard": "npm run dev -w dashboard-web",
+    "dev:planning": "npm run dev -w planning-web",
+    "dev:planning-depts": "npm run dev:depts -w planning-web",
+    "bus:planning": "npm run bus -w planning-web",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "build": "npm run build --workspaces --if-present",
     "gen:types": "bash scripts/gen-types.sh"
