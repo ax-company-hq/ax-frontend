@@ -27,35 +27,38 @@ npm run build -w dashboard-web
 
 API 주소는 루트 `.env`의 `VITE_DASHBOARD_API_URL`로 정한다.
 
-### catbooks 백엔드로 바로 띄워 보기
-ax-backend에 API가 생기기 전에는 catbooks 백엔드(FastAPI, 8000) 하나로 두 앱을 모두 돌릴 수 있다.
+### dashboard-api 목 모드로 띄워 보기
+ax-backend `dashboard-api`를 목 데이터로 띄우면 화면을 바로 볼 수 있다 (읽기 화면만).
 
 ```bash
-# iTshirt-cat/backend
-CORS_ORIGINS=http://localhost:3000,http://localhost:3001 LLM_PROVIDER=mock uvicorn app.main:app --port 8000
+# ax-backend
+DASHBOARD_MOCK=1 uv run --package ax-dashboard-api uvicorn ax_dashboard_api.main:app --port 8020
 # ax-frontend 루트 .env
-VITE_SHOP_API_URL=http://localhost:8000
-VITE_DASHBOARD_API_URL=http://localhost:8000
+VITE_DASHBOARD_API_URL=http://localhost:8020
 ```
+
+브라우저가 3001에서 8020을 부르므로 dashboard-api에 CORS 허용(`http://localhost:3001`)이 있어야 한다.
 
 ## 3. API 타입
 `@ax/types`(루트 `types/`, 자동 생성)에서 가져오는 것이 원칙이다.
-**임시:** ax-backend dashboard-api에 아직 아래 엔드포인트가 없어서(`/health`만 있음) catbooks의 타입을 `src/lib/types.ts`에 그대로 옮겨 두었다.
+**임시:** dashboard-api의 OpenAPI가 `contracts/openapi/`에 반영되기 전이라 catbooks의 타입을 `src/lib/types.ts`에 그대로 옮겨 두었다.
 dashboard-api가 이 API를 열고 `npm run gen:types`로 타입이 생기면 `src/lib/types.ts`를 지우고 `@ax/types/dashboard-api`로 바꾼다.
 
-호출 경로는 모두 `src/lib/api.ts` 한 곳에 있다. 응답은 ax-backend 규약 `{data, meta}` / `{error: {code, message}}`와 catbooks 백엔드 응답 둘 다 받는다.
+호출 경로는 모두 `src/lib/api.ts` 한 곳에 있다. 응답은 ax-backend 규약 `{data, meta}` / `{error: {code, message}}`로 받는다.
 
-| 메서드 | 경로 |
-| --- | --- |
-| GET | `/api/health`, `/api/users` |
-| GET | `/api/admin/dashboard?days`, `/api/admin/kpi`, `/api/admin/kb` |
-| GET·POST | `/api/admin/conversations`, GET `/api/admin/conversations/{id}` |
-| POST | `/api/admin/conversations/{id}/` `customer-messages`, `check`, `agent-messages`, `reject-draft`, `summary`, `status` |
-| GET | `/api/admin/orders?user_id` |
-| GET | `/api/admin/claims?status`, `/api/admin/claims/stats`, `/api/admin/claims/{id}` |
-| POST | `/api/admin/claims/{id}/` `approve`, `reject`, `receive`, `inspection` |
-| GET·POST | `/api/admin/queue`, POST `/api/admin/queue/process` |
-| GET·POST | `/api/admin/reviews`, POST `/api/admin/reviews/{id}/status` |
+| 메서드 | 경로 | 서버 |
+| --- | --- | --- |
+| GET | `/api/dashboard/health`, `/api/dashboard/users` | dashboard-api #17 (목 모드) |
+| GET | `/api/dashboard/metrics?days`, `/api/dashboard/kpis`, `/api/dashboard/kb-chunks` | 〃 |
+| GET | `/api/dashboard/conversations`, `/api/dashboard/conversations/{id}` | 〃 |
+| GET | `/api/dashboard/orders?user_id` | 〃 |
+| GET | `/api/dashboard/claims?status`, `/api/dashboard/claims/stats`, `/api/dashboard/claims/{id}` | 〃 |
+| GET | `/api/dashboard/queue-entries`, `/api/dashboard/reviews` | 〃 |
+| POST | `/api/dashboard/conversations`, `/api/dashboard/conversations/{id}/` `customer-messages`, `check`, `agent-messages`, `reject-draft`, `summary`, `status` | 아직 없음 |
+| POST | `/api/dashboard/claims/{id}/` `approve`, `reject`, `receive`, `inspection` | 아직 없음 |
+| POST | `/api/dashboard/queue-entries/process`, `/api/dashboard/reviews/{id}/status` | 아직 없음 |
+
+쓰기(POST) 경로는 서버가 생기면 그 경로에 맞춰 `api.ts`를 고친다.
 
 ax 구조에서 환불·보상 지급은 고객지원 관문(support 에이전트, `execute()`)을 거쳐야 하므로, dashboard-api가 이 경로를 열 때 승인·지급 계열(`approve`, `queue/process` 등)은 그쪽으로 넘기도록 백엔드에서 정한다.
 
