@@ -108,6 +108,45 @@ export interface SelfTest {
   ran_at: string;
 }
 
+/** 캣북스(쇼핑몰)에서 들어온 환불·교환·보상 신청을 재무 AI가 확인한 결과 */
+export type CatbooksResult = "pass" | "blocked" | "needs_human";
+export interface CatbooksItem {
+  id: string;
+  claim_id: number;
+  order_id: number;
+  order_no: string | null;
+  customer: string | null;
+  type: string;
+  type_ko: string;
+  reason: string;
+  catbooks_status: string;
+  catbooks_status_ko: string;
+  refund_amount: number;
+  points_back: number;
+  compensation: number;
+  paid_amount: number | null;
+  refunded_before: number;
+  queue_position: number | null;
+  queue_ready: boolean;
+  needs_safety: boolean;
+  result: CatbooksResult;
+  result_ko: string;
+  reason_code: string;
+  explanation: string;
+  created_at: string | null;
+  checked_at: string;
+}
+export interface CatbooksSync {
+  ok: boolean;
+  error: string | null;
+  synced_at?: string;
+  tried_at: string;
+  source: string;
+  total?: number;
+  counts?: Record<CatbooksResult, number>;
+}
+export interface CatbooksItems { data: CatbooksItem[]; meta: { count: number; sync: CatbooksSync | null; poll_seconds: number } }
+
 export interface Ledger { compensation: { context_id: string; count: number; total: number }[]; refunds: { order_id: string; refunded: number }[] }
 
 export interface Skill { id: string; description: string; grade: "read" | Grade; allowed_requesters: string[]; verifier: string | null; priority: string }
@@ -151,6 +190,10 @@ export const finance = {
   /** 재무 AI 테스트 버튼: 가짜 자료로 판단을 점검하고 연결을 확인한다(상태를 바꾸지 않음) */
   selfTest: () => get<SelfTest>(FINANCE_AGENT_URL, "/api/finance/self-test"),
   lastSelfTest: () => get<SelfTest | null>(FINANCE_AGENT_URL, "/api/finance/self-test/last"),
+  /** 캣북스에서 들어온 처리할 일 (재무 AI가 확인한 결과, 최근 신청 먼저) */
+  catbooksItems: () => get<CatbooksItems>(FINANCE_AGENT_URL, "/api/finance/catbooks/items", true),
+  /** 지금 가져오기: 재무 AI가 캣북스를 읽어서(읽기만) 다시 확인한다 */
+  catbooksSync: () => get<CatbooksSync>(FINANCE_AGENT_URL, "/api/finance/catbooks/sync"),
   /** C 보류 결정. 사람 토큰만 받는다 (에이전트 토큰은 safety가 거부). */
   decide: async (reviewId: string, decision: "approved" | "rejected", note?: string) => {
     const res = await fetch(`${SAFETY_API_URL}/api/safety/reviews/${reviewId}/decision`, {
