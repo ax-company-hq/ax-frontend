@@ -8,12 +8,12 @@ AX 가상회사(e커머스) 프론트엔드. npm workspaces 모노레포이며, 
 | `dashboard-web/` | 대시보드 화면 | 병환 | 3001 | dashboard-api (8020) |
 | `types/` | API 타입 (자동 생성, 직접 수정 금지) | — | — | — |
 
-스택: React 19 · Vite · TypeScript · Node 22 (`.nvmrc`). 공용 UI는 [`DejaFix/common-frontend`](https://github.com/DejaFix/common-frontend)를 git 태그로 설치한다.
+스택: React 19 · Vite · TypeScript · Node 22.23.4 이상 (`.nvmrc`, 2026-10 보안 릴리스 반영). 공용 UI는 [`DejaFix/common-frontend`](https://github.com/DejaFix/common-frontend)를 git 태그로 설치한다.
 
 ## 실행 방법
 
 ```bash
-nvm use                   # Node 22
+nvm use                   # Node 22.23.4
 cp .env.example .env      # 백엔드 API 주소
 npm install
 npm run dev:shop          # http://localhost:3000
@@ -44,4 +44,4 @@ npm run gen:types -- v0.20261021.0900     # 또는 커밋 SHA
 
 ## CI
 
-`.github/workflows/ci.yml` (잡 이름 `ci`): Node 22 → `npm ci` → 두 앱 typecheck + build.
+`.github/workflows/ci.yml` (잡 이름 `ci`): Node 22.23.4(`.nvmrc`) → `npm ci` → 두 앱 typecheck + build.
