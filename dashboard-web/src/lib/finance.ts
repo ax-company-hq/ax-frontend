@@ -40,7 +40,7 @@ export interface Review {
   decided_by: string | null;
   decided_at: string | null;
   note: string | null;
-  report: { calculation?: string; computed_amount?: number | null; hold_reason?: string; rules?: RuleHit[]; claimed?: Record<string, number>; reason?: string; verification?: { verifier: string; result: string } };
+  report: { ai_review?: { result: "approve" | "reject" | "escalate"; reason_code: string; explanation: string }; totals?: Record<string, number | null>; calculation?: string; computed_amount?: number | null; hold_reason?: string; rules?: RuleHit[]; claimed?: Record<string, number>; reason?: string; verification?: { verifier: string; result: string } };
 }
 
 export interface Rule { key: string; action: string; metric: string; op: string; value: number; field: string | null; allowed: string[]; when: Record<string, unknown> }
@@ -69,6 +69,11 @@ export interface LossReport {
   summary: string;
   at: string;
 }
+/** 사람 대신 결정한 주체. safety Review.decided_by 값 */
+export const AI_REVIEWER = "finance-ai";
+export const RULE_REVIEWER = "auto-rule";
+export const isMachine = (by: string | null | undefined) => by === AI_REVIEWER || by === RULE_REVIEWER;
+
 export interface Ledger { compensation: { context_id: string; count: number; total: number }[]; refunds: { order_id: string; refunded: number }[] }
 
 export interface Skill { id: string; description: string; grade: "read" | Grade; allowed_requesters: string[]; verifier: string | null; priority: string }

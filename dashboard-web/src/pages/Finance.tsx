@@ -3,7 +3,7 @@ import { Loading } from "@/components/admin/bits";
 import { ago, shortDateTime, won } from "@/lib/format";
 import { Link } from "@/lib/nav";
 import {
-  finance, humanTokenSet,
+  AI_REVIEWER, finance, humanTokenSet, isMachine,
   type AgentCard, type ExecutionRecord, type Ledger, type LossReport, type MarketOp, type Review, type RuleHit, type Thresholds, type Verification,
 } from "@/lib/finance";
 
@@ -170,15 +170,22 @@ async function loadAll(): Promise<View> {
 }
 
 /** 처리 흐름: 들어온 요청이 어디로 갔는지. 숫자는 서버 판정을 그대로 센다. */
-function flowOf(executions: ExecutionRecord[]) {
+function flowOf(executions: ExecutionRecord[], reviews: Review[]) {
+  const byExec = new Map(reviews.map((r) => [r.execution_id, r]));
   const viaFinance = (e: ExecutionRecord) =>
-    !!e.decision.verifier && e.decision.verifier !== "safety" && e.decision.hold_reason !== "over_threshold";
+    !!e.decision.verifier && e.decision.verifier !== "safety" && !byExec.has(e.execution_id);
   const direct = executions.filter((e) => e.decision.grade === "A").length;
   const checked = executions.filter(viaFinance);
   const checkedPass = checked.filter((e) => e.decision.status === "executed").length;
-  const human = executions.filter((e) => e.decision.grade === "C" && !viaFinance(e)).length;
-  return { total: executions.length, direct, checked: checked.length, checkedPass, checkedStop: checked.length - checkedPass, human };
+  const held = executions.filter((e) => e.decision.grade === "C" && !viaFinance(e));
+  const ai = held.filter((e) => isMachine(byExec.get(e.execution_id)?.decided_by)).length;
+  return {
+    total: executions.length, direct, checked: checked.length, checkedPass,
+    checkedStop: checked.length - checkedPass, ai, human: held.length - ai,
+  };
 }
+
+const utcDay = (iso: string) => iso.slice(0, 10);
 
 // ---------------------------------------------------------------- 화면
 export default function FinancePage() {
@@ -205,9 +212,19 @@ export default function FinancePage() {
   const { card, executions, reviews, thresholds, verifications, ledger, marketOps, losses, safetyUp, financeUp } = view;
   const deadline = thresholds ? duration(thresholds.review_timeout_seconds) : "정해진 시간";
   const pending = reviews.filter((r) => r.status === "pending").sort((a, b) => a.expires_at.localeCompare(b.expires_at));
-  const decided = reviews.filter((r) => r.status !== "pending").slice(-5).reverse();
+  const decided = reviews.filter((r) => r.status !== "pending" && !isMachine(r.decided_by)).slice(-5).reverse();
+  const machine = reviews.filter((r) => r.status !== "pending" && isMachine(r.decided_by)).slice(-8).reverse();
+  const today = new Date().toISOString().slice(0, 10); // 안전 장치의 하루 기준(UTC)과 같게
+  const todays = executions.filter((e) => utcDay(e.created_at) === today);
+  const spent = todays.filter((e) => e.decision.status === "executed").reduce((n, e) => n + (e.decision.computed_amount ?? 0), 0);
+  const blocked = todays.filter((e) => e.decision.status === "rejected").reduce((n, e) => n + (e.decision.computed_amount ?? 0), 0);
+  const couponLimit = thresholds?.rules.find((r) => r.key === "coupon_daily")?.value ?? 0;
+  const couponUsed = todays
+    .filter((e) => e.request.action === "issue_coupon" && e.decision.status === "executed")
+    .reduce((n, e) => n + (e.decision.computed_amount ?? 0), 0);
+  const couponPct = couponLimit ? Math.min(100, Math.round((couponUsed / couponLimit) * 100)) : 0;
   const pendingMoney = pending.reduce((sum, r) => sum + (r.report.computed_amount ?? 0), 0);
-  const flow = flowOf(executions);
+  const flow = flowOf(executions, reviews);
   const pct = (n: number) => (flow.total ? `${(n / flow.total) * 100}%` : "0%");
   const tone = pending.length ? "text-amber-800" : "text-emerald-800";
 
@@ -228,7 +245,7 @@ export default function FinancePage() {
       <details className="rounded-2xl border border-ink-100 bg-surface px-5 py-3 text-sm">
         <summary className="cursor-pointer font-semibold text-ink-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500">처음이라면: 관리자가 할 일</summary>
         <ol className="mt-3 list-decimal space-y-1.5 pl-5 text-ink-700">
-          <li>맨 위 <b>지금 사람이 결정할 일</b>을 봅니다. 대부분의 일은 AI끼리 처리하고, 기준을 넘거나 이상한 건만 여기로 옵니다.</li>
+          <li>맨 위 <b>지금 사람이 결정할 일</b>을 봅니다. 대부분의 일은 재무 AI가 대신 결정하고, 아주 큰 금액이나 판단할 자료가 없는 건만 여기로 옵니다.</li>
           <li>카드의 <b>금액</b>과 <b>이유</b>를 읽고, 파란 상자의 <b>이럴 땐</b> 힌트를 참고합니다.</li>
           <li><b>진행</b> 또는 <b>멈춤</b>을 누릅니다. 애매하면 멈춤을 누르세요. 진행은 되돌릴 수 없고, 멈춘 일은 요청한 AI가 고쳐서 다시 요청할 수 있습니다. 정한 시간 안에 아무도 누르지 않으면 자동으로 멈춥니다.</li>
         </ol>
@@ -259,7 +276,7 @@ export default function FinancePage() {
             </dl>
           )}
           <p className={`ml-auto max-w-sm pb-1 text-xs ${tone}`}>
-            기준을 넘거나 이상한 요청은 AI가 처리하지 않고 여기서 기다립니다. {deadline} 안에 결정하지 않으면 자동으로 취소됩니다.
+            대부분은 재무 AI가 기준과 자료를 보고 대신 결정하고, 금액이 아주 크거나 판단할 자료가 없는 건만 여기로 옵니다. {deadline} 안에 결정하지 않으면 자동으로 멈춥니다.
           </p>
         </div>
         {!humanTokenSet && pending.length > 0 && <p className="mt-3 text-xs text-amber-800">결정 권한(VITE_SAFETY_HUMAN_TOKEN)이 설정되지 않아 버튼이 꺼져 있습니다.</p>}
@@ -285,6 +302,7 @@ export default function FinancePage() {
                     <ul className="mt-1 space-y-0.5 text-sm text-ink-700">
                       {reasons(r).map((t) => <li key={t}>{t}</li>)}
                     </ul>
+                    {r.report.ai_review?.explanation && <p className="mt-1.5 text-xs text-ink-700">재무 AI 의견: {r.report.ai_review.explanation}</p>}
                     <p className="mt-1.5 rounded-lg bg-brand-50 px-2 py-1 text-xs text-brand-700">이럴 땐: {tipOf(r)}</p>
                     <p className="mt-1 text-xs text-ink-500">
                       {who(r.requester)}가 {ago(r.created_at)} 요청 · <span className={urgent ? "font-semibold text-red-700" : ""}>{duration(left)} 안에 결정하지 않으면 자동 취소</span>
@@ -301,7 +319,7 @@ export default function FinancePage() {
         )}
         {decided.length > 0 && (
           <div className="mt-4 text-xs">
-            <p className={`mb-1 font-medium ${tone}`}>최근 결정</p>
+            <p className={`mb-1 font-medium ${tone}`}>최근 사람이 한 결정</p>
             <ul className="space-y-1">
               {decided.map((r) => (
                 <li key={r.review_id} className="flex flex-wrap items-center gap-2 text-ink-700">
@@ -315,29 +333,85 @@ export default function FinancePage() {
         )}
       </section>
 
+      {/* ①-2 오늘의 돈 흐름 */}
+      <div className="grid gap-4 md:grid-cols-3">
+        <div className="card p-5">
+          <p className="text-xs text-ink-500">오늘 나간 돈</p>
+          <p className="mt-1 text-2xl font-bold tabular-nums">{won(spent)}</p>
+          <p className="mt-1 text-xs text-ink-500">처리된 쿠폰·환불 등의 합계</p>
+        </div>
+        <div className="card p-5">
+          <p className="text-xs text-ink-500">막아서 아낀 돈</p>
+          <p className="mt-1 text-2xl font-bold tabular-nums text-emerald-700">{won(blocked)}</p>
+          <p className="mt-1 text-xs text-ink-500">재무 AI·규칙이 거절해 나가지 않은 금액</p>
+        </div>
+        <div className="card p-5">
+          <div className="flex items-baseline justify-between">
+            <p className="text-xs text-ink-500">오늘 쿠폰 한도</p>
+            <p className="text-xs tabular-nums text-ink-500">{won(couponUsed)} / {won(couponLimit)}</p>
+          </div>
+          <p className={`mt-1 text-2xl font-bold tabular-nums ${couponPct >= 80 ? "text-red-700" : ""}`}>{couponPct}% 사용</p>
+          <div className="mt-2 h-2 overflow-hidden rounded-full bg-ink-100" role="img" aria-label={`오늘 쿠폰 한도 ${couponPct}% 사용`}>
+            <div className={couponPct >= 80 ? "h-full bg-red-700" : "h-full bg-brand-500"} style={{ width: `${couponPct}%` }} />
+          </div>
+          <p className="mt-1 text-xs text-ink-500">한도를 넘으면 쿠폰은 재무 AI나 사람 확인으로 넘어갑니다</p>
+        </div>
+      </div>
+
+      {/* ①-3 AI가 대신 결정한 일 */}
+      <Section title="재무 AI가 대신 결정한 일" hint="기준을 조금 넘었지만 심각하지 않은 건을 재무 AI가 자료를 보고 결정했습니다. 이유를 확인할 수 있습니다.">
+        <div className="card p-4">
+          <ul className="divide-y divide-ink-100">
+            {machine.map((r) => {
+              const ok = r.status === "approved";
+              const label = r.decided_by === AI_REVIEWER ? (ok ? "AI 승인" : "AI 거절") : "자동 거절";
+              return (
+                <li key={r.review_id} className="grid gap-2 py-3 sm:grid-cols-[110px_1fr_auto] sm:items-start">
+                  <span><Chip label={label} tone={ok ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"} /></span>
+                  <div className="min-w-0">
+                    <p className="text-sm"><b>{action(r.action)}</b> <span className="text-ink-500">· {who(r.requester)}</span></p>
+                    {r.note && <p className="mt-0.5 text-sm text-ink-700">{r.note}</p>}
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-semibold tabular-nums">{money(r.report.computed_amount)}</p>
+                    <p className="text-xs text-ink-500">{shortDateTime(r.decided_at)}</p>
+                  </div>
+                </li>
+              );
+            })}
+            {!machine.length && <li className="py-4 text-center text-sm text-ink-500">아직 재무 AI가 대신 결정한 일이 없습니다.</li>}
+          </ul>
+        </div>
+      </Section>
+
       {/* ② 처리 흐름 */}
-      <Section title="들어온 요청이 어떻게 처리됐나" hint="다른 AI가 요청한 일은 금액과 종류에 따라 세 갈래로 나뉩니다.">
+      <Section title="들어온 요청이 어떻게 처리됐나" hint="다른 AI가 요청한 일은 금액과 종류에 따라 네 갈래로 나뉩니다.">
         <div className="card p-5">
           <div className="flex items-baseline gap-2">
             <span className="text-3xl font-bold tabular-nums">{flow.total}</span><span className="text-sm text-ink-500">건 요청</span>
           </div>
-          <div className="mt-3 flex h-3 overflow-hidden rounded-full bg-ink-100" role="img" aria-label={`바로 처리 ${flow.direct}건, 재무 AI 확인 ${flow.checked}건, 사람 확인 ${flow.human}건`}>
+          <div className="mt-3 flex h-3 overflow-hidden rounded-full bg-ink-100" role="img" aria-label={`바로 처리 ${flow.direct}건, 재무 AI 확인 ${flow.checked}건, AI가 결정 ${flow.ai}건, 사람이 결정 ${flow.human}건`}>
             <div className="bg-emerald-700" style={{ width: pct(flow.direct) }} />
             <div className="bg-brand-500" style={{ width: pct(flow.checked) }} />
+            <div className="bg-brand-700" style={{ width: pct(flow.ai) }} />
             <div className="bg-amber-700" style={{ width: pct(flow.human) }} />
           </div>
-          <div className="mt-4 grid gap-4 sm:grid-cols-3">
+          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <div className="border-l-4 border-emerald-700 pl-3">
               <p className="text-sm font-semibold">바로 처리 <span className="tabular-nums">{flow.direct}건</span></p>
               <p className="text-xs text-ink-500">공지, 기록처럼 돈이 나가지 않는 일</p>
             </div>
             <div className="border-l-4 border-brand-500 pl-3">
-              <p className="text-sm font-semibold">재무 AI가 확인 <span className="tabular-nums">{flow.checked}건</span></p>
+              <p className="text-sm font-semibold">재무 AI가 확인 후 처리 <span className="tabular-nums">{flow.checked}건</span></p>
               <p className="text-xs text-ink-500">통과 {flow.checkedPass}건, 막음 {flow.checkedStop}건. 금액과 받을 사람을 원래 자료로 다시 계산</p>
             </div>
+            <div className="border-l-4 border-brand-700 pl-3">
+              <p className="text-sm font-semibold">기준 넘음 → AI가 결정 <span className="tabular-nums">{flow.ai}건</span></p>
+              <p className="text-xs text-ink-500">재량 한도 안이면 승인, 근거가 틀리면 거절</p>
+            </div>
             <div className="border-l-4 border-amber-700 pl-3">
-              <p className="text-sm font-semibold">사람 확인으로 <span className="tabular-nums">{flow.human}건</span></p>
-              <p className="text-xs text-ink-500">기준을 넘거나 이상한 요청. 지금 {pending.length}건이 결정을 기다림</p>
+              <p className="text-sm font-semibold">사람이 결정 <span className="tabular-nums">{flow.human}건</span></p>
+              <p className="text-xs text-ink-500">아주 큰 금액, 정산 확정, 자료가 없는 건. 지금 {pending.length}건이 기다림</p>
             </div>
           </div>
         </div>
@@ -359,6 +433,7 @@ export default function FinancePage() {
                 <dt className="text-ink-500">피해 고객</dt><dd className="text-right tabular-nums">{l.affected_customers == null ? "알 수 없음" : `${l.affected_customers}명`}</dd>
                 <dt className="text-ink-500">피해 금액</dt><dd className="text-right tabular-nums">{l.lost_amount == null ? "알 수 없음" : won(l.lost_amount)}</dd>
                 <dt className="text-ink-500">보상으로 나간 돈</dt><dd className="text-right tabular-nums">{won(l.compensation_total)} ({l.compensation_coupon_count}장)</dd>
+                <dt className="text-ink-500">피해 대비 보상</dt><dd className="text-right tabular-nums">{l.lost_amount ? `${Math.round((l.compensation_total / l.lost_amount) * 100)}%` : "알 수 없음"}</dd>
               </dl>
             </article>
           ))}
