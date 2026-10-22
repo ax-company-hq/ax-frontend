@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { Loading } from "@/components/admin/bits";
 import { ago, shortDateTime, won } from "@/lib/format";
 import { Link } from "@/lib/nav";
 import {
-  AI_REVIEWER, finance, humanTokenSet, isMachine,
-  type AgentCard, type CatbooksItems, type CatbooksItem, type ExecutionRecord, type SelfTest, type Ledger, type LossReport, type MarketOp, type Review, type RuleHit, type Thresholds, type Verification,
+  AI_REVIEWER, GUARDRAIL, finance, humanTokenSet, isMachine,
+  type AgentCard, type CatbooksItems, type CatbooksItem, type ExecutionRecord, type SelfTest, type Ledger, type LossReport, type MarketOp, type Review, type RuleHit, type ThresholdChange, type ThresholdChangeStatus, type Thresholds, type Verification,
 } from "@/lib/finance";
 
 // 재무 AI 화면. 서버(safety·finance)가 계산한 숫자를 그대로 보여 주고, 말만 쉽게 바꾼다.
@@ -61,6 +61,7 @@ const SKILL_KO: Record<string, { name: string; what: string }> = {
   loss_aggregation: { name: "장애 손실 정리", what: "장애 때문에 실패한 주문 수, 피해 금액, 보상으로 나간 돈을 합쳐서 총 손실을 알려 줍니다." },
   seller_review: { name: "판매자 입점 심사", what: "서류와 위험 점수를 보고 입점을 승인합니다. 위험 점수가 높으면 사람이 확인합니다. 판매자가 쓴 소개글은 판단에 쓰지 않습니다." },
   settlement_hold: { name: "판매자 정산 멈춤", what: "문제가 있는 판매자에게 돈이 나가지 않도록 정산을 멈춥니다. 실제 송금은 하지 않습니다." },
+  review_threshold_change: { name: "기준 바꾸기 판단", what: "관리자가 요청한 기준 바꾸기를 정합니다. 낮추기는 승인, 올리기는 최근 24시간 그 기준 때문에 멈춘 일이 3건 이상일 때만 승인합니다. 30% 넘게 바꾸면 재무 담당자에게 넘깁니다." },
 };
 const SELLER_KO: Record<string, string> = { approved: "승인", rejected: "거절", held: "사람 확인 중", undetermined: "판단 보류" };
 const HOLD_KO: Record<string, string> = { held: "정산 멈춤", pending_review: "사람 확인 중", rejected: "멈추지 않음" };
@@ -276,6 +277,140 @@ function CatbooksPanel({ data, syncing, onSync, canSync }: { data: CatbooksItems
   );
 }
 
+// ---------------------------------------------------------------- 기준 바꾸기
+const TIMEOUT_KEY = "review_timeout_seconds";
+const CHANGE_RESULT: Record<ThresholdChangeStatus, { label: string; tone: string; box: string; title: string }> = {
+  applied: { label: "바뀜", tone: "bg-emerald-50 text-emerald-700", box: "bg-emerald-50 text-emerald-800", title: "기준이 바뀌었습니다. 다음 요청부터 새 기준을 씁니다." },
+  pending: { label: "담당자 확인 대기", tone: "bg-amber-50 text-amber-700", box: "bg-amber-50 text-amber-800", title: "재무 담당자의 확인을 기다립니다." },
+  rejected: { label: "거절됨", tone: "bg-red-50 text-red-700", box: "bg-red-50 text-red-800", title: "기준을 바꾸지 않았습니다." },
+};
+const ruleName = (key: string) => (key === TIMEOUT_KEY ? "사람 결정 기한" : RULE_KO[key] ?? key);
+/** 기준 값을 쉬운 말로: 금액은 원, 기한은 시간, 나머지는 숫자 */
+function ruleValue(key: string, v: number | null | undefined): string {
+  if (v == null) return "–";
+  if (key === TIMEOUT_KEY) return duration(v);
+  return MONEY_RULES.has(key) ? won(v) : num(v);
+}
+function decidedText(c: ThresholdChange): string {
+  if (c.status === "pending") return "재무 담당자가 아래에서 승인하거나 거절합니다";
+  const at = shortDateTime(c.decided_at);
+  if (c.decided_by === GUARDRAIL) return `안전 장치가 거절 · ${at}`;
+  if (c.decided_by === AI_REVIEWER) return `재무 AI가 ${c.status === "applied" ? "승인" : "거절"} · ${at}`;
+  return `${c.decided_by}님이 ${c.status === "applied" ? "승인" : "거절"} · ${at}`;
+}
+
+/** "사람 확인 기준" 안의 기준 바꾸기: 요청 폼 + 결과 + 최근 기록(기다리는 건은 승인·거절). */
+function ThresholdChangePanel({ thresholds, changes, reload }: { thresholds: Thresholds | null; changes: ThresholdChange[]; reload: () => Promise<unknown> }) {
+  const baseline = thresholds?.baseline ?? {};
+  const keys = Object.keys(baseline);
+  const [key, setKey] = useState("");
+  const [value, setValue] = useState("");
+  const [reason, setReason] = useState("");
+  const [sending, setSending] = useState(false);
+  const [result, setResult] = useState<ThresholdChange | null>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+  const [deciding, setDeciding] = useState<string | null>(null);
+
+  const chosen = key || keys[0] || "";
+  const current = chosen === TIMEOUT_KEY ? thresholds?.review_timeout_seconds : thresholds?.rules.find((r) => r.key === chosen)?.value;
+  const base = baseline[chosen];
+  const asNumber = Number(value.replace(/,/g, ""));
+  const ready = humanTokenSet && !!chosen && value.trim() !== "" && Number.isInteger(asNumber) && reason.trim() !== "" && !sending;
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    if (!ready) return;
+    setSending(true); setProblem(null); setResult(null);
+    try {
+      setResult(await finance.requestThresholdChange(chosen, asNumber, reason.trim()));
+      setValue(""); setReason("");
+      await reload();
+    } catch (err) { setProblem((err as Error).message); } finally { setSending(false); }
+  }
+
+  async function decideChange(id: string, decision: "approved" | "rejected") {
+    setDeciding(id + decision); setProblem(null);
+    try { await finance.decideThresholdChange(id, decision); await reload(); }
+    catch (err) { setProblem((err as Error).message); } finally { setDeciding(null); }
+  }
+
+  if (!thresholds) return null;
+  return (
+    <div className="mt-4 border-t border-ink-100 pt-4">
+      <h3 className="text-sm font-semibold text-ink-900">기준 바꾸기 요청</h3>
+      <p className="mt-0.5 text-xs text-ink-500">
+        안전 장치가 먼저 범위를 확인하고(처음 값의 절반~두 배, 결정 기한은 1시간~3일), 그 안이면 재무 AI가 정합니다.
+        크게 바꾸거나 근거가 부족하면 재무 담당자에게 넘어갑니다. 적은 이유는 기록만 하고 판단에는 쓰지 않습니다.
+      </p>
+      {keys.length === 0 ? (
+        <p className="mt-2 text-xs text-ink-500">안전 장치 서버가 기준 바꾸기를 지원하지 않습니다.</p>
+      ) : (
+        <form className="mt-3 grid gap-2" onSubmit={submit}>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <label className="text-xs text-ink-500">
+              바꿀 기준
+              <select className="field mt-1" value={chosen} onChange={(e) => { setKey(e.target.value); setResult(null); }}>
+                {keys.map((k) => <option key={k} value={k}>{ruleName(k)}</option>)}
+              </select>
+            </label>
+            <label className="text-xs text-ink-500">
+              새 값{chosen === TIMEOUT_KEY ? " (초)" : MONEY_RULES.has(chosen) ? " (원)" : ""}
+              <input className="field mt-1 tabular-nums" inputMode="numeric" placeholder={current != null ? String(current) : ""} value={value} onChange={(e) => setValue(e.target.value)} />
+            </label>
+          </div>
+          <p className="text-xs text-ink-500">
+            지금 {ruleValue(chosen, current)} · 처음 값 {ruleValue(chosen, base)}
+            {base != null && ` · 바꿀 수 있는 범위 ${ruleValue(chosen, Math.ceil(base / 2))} ~ ${ruleValue(chosen, base * 2)}`}
+          </p>
+          <label className="text-xs text-ink-500">
+            바꾸는 이유 <span className="tabular-nums">({reason.length}/300)</span>
+            <textarea className="field mt-1 h-16 resize-none" maxLength={300} placeholder="예: 이번 주 이 기준 때문에 멈춘 쿠폰이 너무 많아요" value={reason} onChange={(e) => setReason(e.target.value)} />
+          </label>
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="submit" className="btn-primary" disabled={!ready}>{sending ? "재무 AI가 보는 중…" : "재무 AI에게 요청"}</button>
+            {!humanTokenSet && <span className="text-xs text-amber-800">요청 권한(VITE_SAFETY_HUMAN_TOKEN)이 설정되지 않아 버튼이 꺼져 있습니다.</span>}
+          </div>
+        </form>
+      )}
+
+      {result && (
+        <div aria-live="polite" className={`mt-3 rounded-xl px-3 py-2 text-sm ${CHANGE_RESULT[result.status].box}`}>
+          <p className="font-semibold">{CHANGE_RESULT[result.status].title}</p>
+          <p className="mt-0.5">{ruleName(result.key)} {ruleValue(result.key, result.old_value)} → {ruleValue(result.key, result.new_value)}{result.version_after != null && ` (${result.version_after}번째 기준)`}</p>
+          {result.explanation && <p className="mt-0.5 text-xs">{result.explanation}</p>}
+        </div>
+      )}
+      {problem && <p role="alert" className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-800">{problem}</p>}
+
+      <h3 className="mt-5 text-sm font-semibold text-ink-900">최근 기준 바꾸기</h3>
+      <ul className="mt-2 space-y-2">
+        {changes.slice(0, 8).map((c) => (
+          <li key={c.change_id} className="rounded-xl border border-ink-100 px-3 py-2 text-sm">
+            <div className="flex flex-wrap items-center gap-2">
+              <Chip label={CHANGE_RESULT[c.status].label} tone={CHANGE_RESULT[c.status].tone} />
+              <b>{ruleName(c.key)}</b>
+              <span className="tabular-nums text-ink-700">{ruleValue(c.key, c.old_value)} → {ruleValue(c.key, c.new_value)}</span>
+              <span className="ml-auto text-xs text-ink-500">{who(c.requested_by)} 요청 · {ago(c.created_at)}</span>
+            </div>
+            {c.explanation && <p className="mt-1 text-xs text-ink-700">{c.explanation}</p>}
+            <p className="mt-0.5 text-xs text-ink-500">이유: {c.reason}</p>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <span className="text-xs text-ink-500">{decidedText(c)}</span>
+              {c.status === "pending" && (
+                <span className="ml-auto flex gap-2">
+                  <button className="btn-primary" disabled={!humanTokenSet || deciding !== null} onClick={() => decideChange(c.change_id, "approved")}>승인</button>
+                  <button className="btn-ghost" disabled={!humanTokenSet || deciding !== null} onClick={() => decideChange(c.change_id, "rejected")}>거절</button>
+                </span>
+              )}
+            </div>
+          </li>
+        ))}
+        {!changes.length && <li className="py-3 text-center text-xs text-ink-500">아직 기준을 바꾼 기록이 없습니다.</li>}
+      </ul>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------- 데이터
 interface View {
   card: AgentCard | null;
@@ -287,6 +422,7 @@ interface View {
   marketOps: MarketOp[];
   losses: LossReport[];
   catbooks: CatbooksItems | null;
+  changes: ThresholdChange[];
   safetyUp: boolean;
   financeUp: boolean;
 }
@@ -294,7 +430,7 @@ interface View {
 /** 한쪽 서버가 꺼져 있어도 나머지는 보이도록 따로 받는다. */
 async function loadAll(): Promise<View> {
   const get = async <T,>(p: Promise<T>, fallback: T): Promise<[T, boolean]> => { try { return [await p, true]; } catch { return [fallback, false]; } };
-  const [[card, financeUp], [executions, safetyUp], [reviews], [thresholds], [verifications], [ledger], [marketOps], [losses], [catbooks]] = await Promise.all([
+  const [[card, financeUp], [executions, safetyUp], [reviews], [thresholds], [verifications], [ledger], [marketOps], [losses], [catbooks], [changes]] = await Promise.all([
     get<AgentCard | null>(finance.card(), null),
     get<ExecutionRecord[]>(finance.executions(), []),
     get<Review[]>(finance.reviews(), []),
@@ -304,8 +440,9 @@ async function loadAll(): Promise<View> {
     get<MarketOp[]>(finance.marketOps(), []),
     get<LossReport[]>(finance.lossReports(), []),
     get<CatbooksItems | null>(finance.catbooksItems(), null),
+    get<ThresholdChange[]>(finance.thresholdChanges(), []),
   ]);
-  return { card, executions, reviews, thresholds, verifications, ledger, marketOps, losses, catbooks, safetyUp, financeUp };
+  return { card, executions, reviews, thresholds, verifications, ledger, marketOps, losses, catbooks, changes, safetyUp, financeUp };
 }
 
 /** 처리 흐름: 들어온 요청이 어디로 갔는지. 숫자는 서버 판정을 그대로 센다. */
@@ -375,7 +512,8 @@ export default function FinancePage() {
   }
 
   if (!view) return <Loading error={null} />;
-  const { card, executions, reviews, thresholds, verifications, ledger, marketOps, losses, catbooks, safetyUp, financeUp } = view;
+  const { card, executions, reviews, thresholds, verifications, ledger, marketOps, losses, catbooks, changes, safetyUp, financeUp } = view;
+  const changesWaiting = changes.filter((c) => c.status === "pending").length;
   const deadline = thresholds ? duration(thresholds.review_timeout_seconds) : "정해진 시간";
   const pending = reviews.filter((r) => r.status === "pending").sort((a, b) => a.expires_at.localeCompare(b.expires_at));
   const decided = reviews.filter((r) => r.status !== "pending" && !isMachine(r.decided_by)).slice(-5).reverse();
@@ -427,7 +565,7 @@ export default function FinancePage() {
           <li><b>진행</b> 또는 <b>멈춤</b>을 누릅니다. 애매하면 멈춤을 누르세요. 진행은 되돌릴 수 없고, 멈춘 일은 요청한 AI가 고쳐서 다시 요청할 수 있습니다. 정한 시간 안에 아무도 누르지 않으면 자동으로 멈춥니다.</li>
         </ol>
         <p className="mt-3 text-xs text-ink-500">
-          이유별 판단 기준과 자주 묻는 질문은 <Link href="/finance/guide" className="font-medium text-brand-700 underline">재무 AI 관리자 사용법</Link>에 있습니다. 기준 금액을 바꾸고 싶으면 재무 담당자에게 요청하세요.
+          이유별 판단 기준과 자주 묻는 질문은 <Link href="/finance/guide" className="font-medium text-brand-700 underline">재무 AI 관리자 사용법</Link>에 있습니다. 기준 금액을 바꾸고 싶으면 아래 "사람 확인 기준"의 <b>기준 바꾸기 요청</b>을 쓰세요. 안전 장치 범위 안에서 재무 AI가 정하고, 크게 바꾸면 재무 담당자가 확인합니다.
         </p>
       </details>
 
@@ -715,11 +853,12 @@ export default function FinancePage() {
           </ul>
         </details>
 
-        <details className="card p-5">
+        <details className="card p-5" open={changesWaiting > 0 ? true : undefined}>
           <summary className="cursor-pointer text-base font-semibold text-ink-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500">
             사람 확인 기준 <span className="text-xs font-normal text-ink-500">{thresholds ? `결정 기한 ${deadline}` : ""}</span>
+            {changesWaiting > 0 && <> <Chip label={`기준 바꾸기 ${changesWaiting}건 확인 대기`} tone="bg-amber-100 text-amber-800" /></>}
           </summary>
-          <p className="mt-2 text-xs text-ink-500">아래 기준에 걸리면 AI가 처리하지 않고 사람이 결정합니다. 기준은 사람만 바꿀 수 있습니다{thresholds && ` (현재 ${thresholds.version}번째 기준)`}.</p>
+          <p className="mt-2 text-xs text-ink-500">아래 기준에 걸리면 AI가 처리하지 않고 사람이 결정합니다. 기준은 아래 "기준 바꾸기 요청"으로 바꿀 수 있고, 안전 장치 범위 안에서 재무 AI가 정합니다{thresholds && ` (현재 ${thresholds.version}번째 기준)`}.</p>
           <ul className="mt-2 space-y-1.5 text-sm">
             {(thresholds?.rules ?? []).map((r) => (
               <li key={r.key} className="flex justify-between gap-3 border-t border-ink-100 pt-1.5">
@@ -730,6 +869,7 @@ export default function FinancePage() {
               </li>
             ))}
           </ul>
+          <ThresholdChangePanel thresholds={thresholds} changes={changes} reload={load} />
         </details>
       </div>
     </div>
