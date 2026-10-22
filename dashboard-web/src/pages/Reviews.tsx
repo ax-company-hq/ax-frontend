@@ -33,7 +33,7 @@ export default function ReviewsPage() {
         {rows.map((r) => (
           <li key={r.id} className="card p-4">
             <div className="flex flex-wrap items-center gap-2 text-xs">
-              <span className={`chip ${STATUS[r.status].tone}`}>{STATUS[r.status].label}</span>
+              {(() => { const st = STATUS[r.status] ?? { label: r.status, tone: "bg-ink-100 text-ink-500" }; return <span className={`chip ${st.tone}`}>{st.label}</span>; })()}
               <Stars value={r.rating} size={13} /><b>{r.user}</b><span className="text-ink-500">· {r.product} · {dateStr(r.created_at)}</span>
               {r.verified && <span className="chip bg-brand-50 text-brand-700">구매 인증</span>}
               <div className="ml-auto flex gap-1.5">
