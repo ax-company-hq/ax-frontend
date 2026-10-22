@@ -6,6 +6,9 @@ AX 가상회사(e커머스) 프론트엔드. npm workspaces 모노레포이며, 
 | --- | --- | --- | --- | --- |
 | `shop-web/` | 판매 사이트 화면 | 재헌 | 3000 | shop-api (8010) |
 | `dashboard-web/` | 대시보드 화면 | 병환 | 3001 | dashboard-api (8020) |
+| `planning-web/` | 기획개발 화면 (목 데이터 시연판, 시뮬레이터 3003·연동 버스 8790) | 예진 | 3002 | planning (8101, 예정) |
+
+> **포트 계획:** 판매 사이트(`shop-web`, 3000)만 따로 두고, 나머지 화면(대시보드·부서 화면)은 나중에 **업무 시스템 하나로 합쳐 같은 포트**를 쓴다. 로그인하면 자기 부서 탭으로 들어가는 구조다. `planning-web`의 3002·3003은 합치기 전 개발용 임시 포트다.
 | `types/` | API 타입 (자동 생성, 직접 수정 금지) | — | — | — |
 
 스택: React 19 · Vite · TypeScript · Node 22.23.4 이상 (`.nvmrc`, 2026-10 보안 릴리스 반영). 공용 UI는 [`DejaFix/common-frontend`](https://github.com/DejaFix/common-frontend)를 git 태그로 설치한다.
@@ -18,8 +21,9 @@ cp .env.example .env      # 백엔드 API 주소
 npm install
 npm run dev:shop          # http://localhost:3000
 npm run dev:dashboard     # http://localhost:3001
-npm run typecheck         # 두 앱 타입 검사
-npm run build             # 두 앱 빌드
+npm run dev:planning      # http://localhost:3002 (npm run bus:planning 먼저)
+npm run typecheck         # 앱 타입 검사
+npm run build             # 앱 빌드
 ```
 
 백엔드까지 함께 띄우려면 두 레포를 같은 폴더에 나란히 clone하고, `ax-backend`에서 `docker compose -f infra/compose.yml up`을 실행한다.

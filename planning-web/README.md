@@ -1,0 +1,51 @@
+# planning-web
+
+담당: 예진 · 포트: 3002 (다른 부서 시뮬레이터 3003, 연동 버스 8790) · 연결 API: planning 에이전트 (8101, 아직 목 데이터)
+
+> 3002·3003은 개발용 임시 포트다. 판매 사이트를 뺀 화면은 나중에 업무 시스템 하나(같은 포트)로 합치고, 기획개발 화면은 그 안의 부서 탭이 된다.
+
+## 1. 역할
+고객사(데모: 캣북스) 업무 시스템 안의 **기획개발팀 화면**. 다른 부서의 변경 요청 → 기획서 → 작업 → PR → 검수 → 머지 → 사후관리를 한 화면에서 다룬다.
+사이드바는 프로젝트·요청·작업·정리·소통·지표, 하위 목록은 상단 가로탭이다. 지금은 백엔드 없이 목 데이터로 동작하는 시연판(PLANNING_MOCK=1과 같은 역할)이다.
+
+| 메뉴 | 내용 |
+| --- | --- |
+| 프로젝트 | 요청 1건을 프로젝트로 보고 요청·작업·운영·처리·소통·문서를 한 화면에 |
+| 요청 | 들어온·진행 중·해결된·후속 요청, 중복 연결, 간단 요청 판정 |
+| 작업 | 기획서(문단 id·질문·기각 경고), 작업·PR(검수·머지·코드 역추적), 운영·배포, 사후관리 |
+| 정리 | 정리 문서 편집, 요청 하나를 모아 문서 만들기, AI 어시스턴트로 문서 만들기 |
+| 소통 | 슬랙형 채널(팀·부서·문서 스레드), 결정으로 기록, 문서에 추가 |
+| 지표 | 지표 6종, 자동 처리 범위(승급 제안·자동 축소), 에이전트 활동, 부서 연동 |
+| `<회사명>` 바로가기 | 판매 사이트(shop-web)를 새 탭으로. 사이드바 로고는 그 사이트 파비콘 |
+
+## 2. 실행 방법
+레포 루트에서:
+
+```bash
+npm install
+npm run bus:planning           # 연동 버스 http://127.0.0.1:8790 (두 화면이 같은 상태를 봄)
+npm run dev:planning           # 기획개발 화면 http://localhost:3002
+npm run dev:planning-depts     # 다른 부서 시뮬레이터 http://localhost:3003/#/depts
+npm run typecheck -w planning-web
+npm run build -w planning-web
+```
+
+- 버스가 없으면 화면 혼자 동작한다(상단 배너에 표시).
+- 시뮬레이터에서 버튼을 누르면 기획개발 화면이 새로고침 없이 바뀐다.
+- `src/data.ts`의 리듀서를 바꾸면 버스를 다시 띄운다(버스가 같은 파일을 읽는다).
+- 고객사 값은 루트 `.env`의 `VITE_COMPANY_NAME`·`VITE_COMPANY_TAGLINE`·`VITE_SHOP_WEB_URL`·`VITE_COMPANY_LOGO`(`src/company.ts`).
+
+## 3. 입출력 계약
+- 지금: `src/data.ts`의 목 상태와 리듀서, `server/mock-bus.mjs`(`GET /state`, SSE `/events`, `POST /action`, `POST /reset`).
+- 다음: `src/store.ts`를 planning 에이전트의 `/api/planning/*`·SSE로 바꾸고 계약(`ax-backend/contracts/.../planning.py`) ↔ 화면 모델 변환 함수를 둔다. 시뮬레이터는 목 모드에서만 남긴다.
+- 연결 지점 이름(`create_ticket`, `find_related_prs`, `link_incident`, `verify_rollback_target`, `record_case` …)은 에이전트 공통 구성안을 따른다.
+
+## 4. 의존
+`@dejafix/common-frontend` v0.1.0 (AppShell·토큰·컴포넌트), React 19, Vite.
+
+## 5. 하지 않는 것
+- 실제 GitHub·인사·인프라 호출(목 데이터만).
+- 원인 판정·롤백(인프라), 결정 카드 판정(인사), 주문·결제 데이터(판매 사이트).
+- 확정·머지를 AI 어시스턴트가 하는 것(조회·문서 정리만).
+
+요구사항: 기획개발팀 프로젝트 매니징 자동화 요구사항정의서 v0.3 (FR 85건 중 프로토타입 완료 63건).
