@@ -8,6 +8,7 @@ export type StepStatus =
   | 'held'
   | 'skipped'
   | 'rejected_by_human'
+  | 'transfer_queued'
 
 export interface Step {
   step_id: string

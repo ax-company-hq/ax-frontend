@@ -5,24 +5,38 @@ const BASE = '/orch'
 
 export class OrchestratorUnreachable extends Error {}
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+async function requestEnvelope<T>(
+  path: string,
+  init?: RequestInit,
+): Promise<{ data: T; meta: { mock?: boolean } }> {
   let response: Response
   try {
     response = await fetch(BASE + path, init)
   } catch {
     throw new OrchestratorUnreachable('총괄에 연결할 수 없음')
   }
-  const body = (await response.json().catch(() => null)) as { data?: T } | null
+  const body = (await response.json().catch(() => null)) as {
+    data?: T
+    meta?: { mock?: boolean }
+  } | null
   if (!response.ok || !body || body.data === undefined) {
     // 프록시 대상이 안 떠 있으면 개발 서버가 JSON 없이 5xx를 돌려준다
     if (response.status >= 500 && !body) throw new OrchestratorUnreachable('총괄에 연결할 수 없음')
     // 다른 서비스가 그 포트를 쓰고 있는 경우 (예: 오류 JSON에 data가 없음)
     throw new OrchestratorUnreachable(`총괄이 아닌 서버가 응답함 (HTTP ${response.status})`)
   }
-  return body.data
+  return { data: body.data, meta: body.meta ?? {} }
 }
 
-export const listIncidents = () => request<Incident[]>('/api/incidents')
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  return (await requestEnvelope<T>(path, init)).data
+}
+
+/** 사건 목록과, 총괄이 목 모드인지(`meta.mock`). 승인·거절 버튼은 목 모드에서만 보여 준다 */
+export async function listIncidents(): Promise<{ incidents: Incident[]; mock: boolean }> {
+  const { data, meta } = await requestEnvelope<Incident[]>('/api/incidents')
+  return { incidents: data, mock: meta.mock === true }
+}
 export const getRegistry = () => request<Registry>('/api/registry')
 
 export const injectIncident = (options: DemoOptions) =>
@@ -32,7 +46,7 @@ export const injectIncident = (options: DemoOptions) =>
     body: JSON.stringify(options),
   })
 
-/** 사람 승인·거절 (대시보드 승인 대기열 동작을 흉내 낸 것. 총괄이 승인하는 게 아니다) */
+/** 목 모드에서만: 사람 승인·거절 흉내 (총괄이 승인하는 게 아니다. 총괄 홀드 엔드포인트는 사람 토큰 확인이 없다, #265) */
 export const decideHold = (contextId: string, stepId: string, approved: boolean) =>
   request<{ ok: boolean }>(`/api/incidents/${contextId}/holds/${stepId}`, {
     method: 'POST',

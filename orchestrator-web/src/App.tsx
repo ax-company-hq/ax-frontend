@@ -11,6 +11,7 @@ const STATUS_LABEL: Record<StepStatus, string> = {
   held: '승인 대기',
   skipped: '건너뜀',
   rejected_by_human: '거절',
+  transfer_queued: '이관 큐',
 }
 
 const INCIDENT_LABEL: Record<Incident['status'], string> = {
@@ -22,9 +23,12 @@ const INCIDENT_LABEL: Record<Incident['status'], string> = {
 const OPTION_LABELS: [keyof DemoOptions, string][] = [
   ['hold_rollback', '롤백을 C 등급 보류(사람 승인 대기)로'],
   ['fail_marketing', '공지 게시 1회 실패(재시도)'],
-  ['wrong_owner', '공지 게시를 다른 부서에 이관'],
+  ['wrong_owner', '공지 게시 거절(이관 큐로 넘김)'],
   ['infra_card_empty', '인프라 카드 비어 있음(현재 dev 상태)'],
 ]
+
+// 실제 모드의 사람 결정은 안전 관문 보류 큐(관리자 재무·안전 화면) 하나로만 간다
+const HOLD_QUEUE_URL = `${import.meta.env.VITE_DASHBOARD_WEB_URL || 'http://localhost:3001'}/finance`
 
 const kst = (iso: string | null) =>
   iso ? new Date(iso).toLocaleTimeString('ko-KR', { hour12: false }) : ''
@@ -43,6 +47,7 @@ export function App() {
   const [pinned, setPinned] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [mock, setMock] = useState(true)
   const flowRef = useRef<HTMLElement>(null)
 
   const refreshRegistry = useCallback(async () => {
@@ -55,7 +60,9 @@ export function App() {
 
   const tick = useCallback(async () => {
     try {
-      setIncidents(await listIncidents())
+      const result = await listIncidents()
+      setIncidents(result.incidents)
+      setMock(result.mock)
       setError(null)
     } catch (e) {
       setError(e instanceof OrchestratorUnreachable ? e.message : '알 수 없는 오류')
@@ -272,14 +279,22 @@ export function App() {
                   <div className="hold" key={h.step_id}>
                     <b>{h.label}</b>
                     <div className="note">{h.skill} — 사람 승인이 필요해 보류됨</div>
-                    <div className="row">
-                      <button className="btn primary" onClick={() => void decide(h.step_id, true)}>
-                        승인
-                      </button>
-                      <button className="btn" onClick={() => void decide(h.step_id, false)}>
-                        거절
-                      </button>
-                    </div>
+                    {mock ? (
+                      <div className="row">
+                        <button className="btn primary" onClick={() => void decide(h.step_id, true)}>
+                          승인
+                        </button>
+                        <button className="btn" onClick={() => void decide(h.step_id, false)}>
+                          거절
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="row">
+                        <a className="btn primary" href={HOLD_QUEUE_URL} target="_blank" rel="noreferrer">
+                          안전 관문 보류 큐에서 결정하기
+                        </a>
+                      </div>
+                    )}
                   </div>
                 ))
               ) : (

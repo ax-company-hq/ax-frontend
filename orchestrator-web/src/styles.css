@@ -54,6 +54,8 @@
   .failed .dot, .rejected_by_human .dot { background: var(--red); }
   .failed, .rejected_by_human { color: var(--red); }
   .skipped { color: var(--muted); }
+  .transfer_queued { color: var(--yellow); }
+  .transfer_queued .dot { background: var(--yellow); }
   .pending { color: #666; }
   @keyframes pulse { 50% { opacity: .3; } }
   .grade { font-size: 11px; font-weight: 800; padding: 2px 6px; border-radius: 4px;
