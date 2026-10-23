@@ -599,7 +599,10 @@ export function prReviewOf(s: State, prId: string, id: string, t: string): Cross
   }
   const prot = protectedOf(pr.gate.paths)
   if (prot) {
-    return { ...base, lane: 'human', irreversible: `보호 경로 ${prot}`, routeWhy: [`safety 보호 경로(#203): ${prot}`], checks: [...checks, { label: '보호 경로', result: '걸림', detail: `${prot} → 학습과 상관없이 항상 사람이 확인` }], verifier: '사람 (기획개발팀 팀장)' }
+    // 보호 경로는 항상 C(#203)이고, C 보류 건은 #110·#190 합의대로 safety AI가 먼저 판단한다(심각한 건만 사람).
+    // 학습 기준(AR-n)으로는 풀지 않는다(proposeStep에서 제외)
+    const protChecks: RuleCheck[] = [...checks, { label: '보호 경로', result: '확인 필요', detail: `${prot} → C 보류, safety AI 1차 판단(#110). 금액 불일치·미등록 액션·형식 오류·무응답이면 사람` }]
+    return { ...base, lane: 'ai', routeWhy: [`safety 보호 경로(#203) C: ${prot}`, ...route], checks: protChecks, verifier: '안전 레이어 → AI 1차 판단 (#110, C 보류)', ...recommendOf(protChecks) }
   }
   return { ...base, lane: 'ai', routeWhy: route, checks, verifier: verifierFor('merge_pr', pr.gate.paths), ...recommendOf(checks) }
 }
@@ -1334,10 +1337,13 @@ function step(s: State): State {
   for (const p of s.prs) {
     if (p.merged || pendingReview(s, p.id)) continue
     const last = p.reviews[p.reviews.length - 1]
-    if (last === '통과' && !s.reviews.some((x) => x.ref === p.id && x.result === '거절')) {
+    const rejected = s.reviews.filter((x) => x.ref === p.id && x.result === '거절').length
+    if (last === '통과' && !rejected) {
       const n = tryMerge(s, p.id)
       if (moved(n)) return n
     }
+    // 교차검증 거절은 수정 커밋 후 한 번 자동으로 다시 올린다. 두 번 거절되면 사람에게 남긴다
+    if (last === '통과' && rejected === 1) return inner(s, { type: 'reviewPr', pr: p.id })
     if (last === '불일치' && p.reviews.filter((x) => x === '불일치').length < 2) return inner(s, { type: 'reviewPr', pr: p.id })
   }
   const o = observeStep(s)
