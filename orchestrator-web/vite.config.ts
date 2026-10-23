@@ -10,7 +10,10 @@ export default defineConfig(({ mode }) => {
   const proxy = {
     '/orch': { target: orchestrator, changeOrigin: true, rewrite: (p: string) => p.replace(/^\/orch/, '') },
   }
+  // 관리자 아래에 붙일 때(`/admin/orchestrator/`) planning-web처럼 기준 경로를 바꾼다. 기본은 루트
+  const base = env.ORCHESTRATOR_WEB_BASE || '/'
   return {
+    base,
     plugins: [react()],
     envDir: '..',
     server: { port: 3004, strictPort: true, proxy },

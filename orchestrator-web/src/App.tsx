@@ -102,7 +102,7 @@ export function App() {
       <div className="banner">
         <div className="wrap">
           <span className="tag">MOCK</span>
-          <span>가짜 부서 7곳으로 돌리는 통합 에이전트 목업입니다. 값은 모두 지어낸 데이터예요.</span>
+          <span>개발·시연용 콘솔이에요. 가짜 부서 7곳으로 총괄을 돌리고, 값은 모두 지어낸 데이터예요.</span>
           <a href="#flow">사건 흐름 보기 →</a>
         </div>
       </div>
