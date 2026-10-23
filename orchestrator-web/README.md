@@ -8,7 +8,7 @@
 | **시연 콘솔 (이 앱)** | `orchestrator-web/` | 준하 | 개발·시연: 장애 주입, 가짜 부서 옵션, 부서 카드, 사건 흐름 |
 | 운영 화면 (회사 전체) | `dashboard-web/` 관리자 | 병환 | 가상 회사 직원이 보는 사건 목록·승인 대기열·소통. `dashboard-api`를 거쳐 읽음 |
 
-- 이 콘솔은 **개발 서버가 총괄을 직접 부릅니다**(`/orch` 프록시). 개발 서버에서만 동작하고, 배포 빌드에서 쓰려면 `dashboard-api`를 거치는 경로가 필요합니다(ax-backend #255 진행 중). 그전까지는 로컬 시연·연동 확인용입니다.
+- 이 콘솔은 **개발 서버가 총괄을 직접 부릅니다**(`/orch` 프록시). 개발 서버에서만 동작하고, 운영 화면은 `dashboard-api`의 읽기 전용 사건 경로(ax-backend #257로 머지됨)를 쓰고, 이 콘솔은 로컬 시연·연동 확인용입니다.
 - 장애 주입 버튼과 가짜 부서 옵션은 개발용 기능이라 운영 화면(관리자)에는 넣지 않습니다.
 - 관리자 아래에 붙일 때는 `planning-web`처럼 기준 경로를 바꿉니다: `ORCHESTRATOR_WEB_BASE=/admin/orchestrator/ npm run build -w orchestrator-web`. (Windows Git Bash는 `/`로 시작하는 값을 경로로 바꿔 버려서 앞에 `MSYS_NO_PATHCONV=1`을 붙인다.)
 
