@@ -549,13 +549,6 @@ export default function FinancePage() {
         </div>
       </header>
 
-      {test ? <SelfTestPanel test={test} open={testOpen} /> : (
-        <p className="rounded-2xl border border-dashed border-ink-300 px-5 py-3 text-sm text-ink-500">
-          최근 {TEST_TTL_HOURS}시간 안에 한 테스트가 없습니다. <b>재무 AI 테스트</b>를 눌러 재무 AI가 제대로 판단하고 연결돼 있는지 확인하세요. 가짜 자료로 점검해서 실제 기록이나 돈에는 영향이 없습니다.
-          <span className="mt-1 block text-xs">테스트를 통과하지 못하면 재무 AI의 결정을 믿고 쓰지 마세요.</span>
-        </p>
-      )}
-
       <details className="rounded-2xl border border-ink-100 bg-surface px-5 py-3 text-sm">
         <summary className="cursor-pointer font-semibold text-ink-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500">처음이라면: 관리자가 할 일</summary>
         <ol className="mt-3 list-decimal space-y-1.5 pl-5 text-ink-700">
@@ -568,6 +561,13 @@ export default function FinancePage() {
           이유별 판단 기준과 자주 묻는 질문은 <Link href="/finance/guide" className="font-medium text-brand-700 underline">재무 AI 관리자 사용법</Link>에 있습니다. 기준 금액을 바꾸고 싶으면 아래 "사람 확인 기준"의 <b>기준 바꾸기 요청</b>을 쓰세요. 안전 장치 범위 안에서 재무 AI가 정하고, 크게 바꾸면 재무 담당자가 확인합니다.
         </p>
       </details>
+
+      {test ? <SelfTestPanel test={test} open={testOpen} /> : (
+        <p className="rounded-2xl border border-dashed border-ink-300 px-5 py-3 text-sm text-ink-500">
+          최근 {TEST_TTL_HOURS}시간 안에 한 테스트가 없습니다. <b>재무 AI 테스트</b>를 눌러 재무 AI가 제대로 판단하고 연결돼 있는지 확인하세요. 가짜 자료로 점검해서 실제 기록이나 돈에는 영향이 없습니다.
+          <span className="mt-1 block text-xs">테스트를 통과하지 못하면 재무 AI의 결정을 믿고 쓰지 마세요.</span>
+        </p>
+      )}
 
       {(!safetyUp || !financeUp) && (
         <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm font-medium text-red-800">
