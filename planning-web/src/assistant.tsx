@@ -59,7 +59,7 @@ function plan(q: string, s: State): Plan {
     return {
       tool: 'planning_get_auto_policy', args: {},
       summary: `기준 ${live.length}개 사용 중, 교차검증 대기 ${waiting.length}건`,
-      answer: `지금 쓰는 자동 처리 기준은 ${live.length ? live.map((r) => `${r.id}(${ruleText(r)}, ${r.status})`).join(', ') : '없음'}입니다. 이 안의 PR은 검수 통과 뒤 바로 자동 머지하고, 밖이면 AI 교차검증을 거칩니다. 지금 교차검증 대기는 ${waiting.length}건입니다. 교차검증에서 승인된 건은 기준으로 한 번 학습하고 과거 기록으로 백테스트한 뒤 시험 중으로 씁니다. 기준으로 머지한 PR이 장애에 연결되면 그 기준은 바로 꺼집니다.`,
+      answer: `지금 쓰는 자동 처리 기준은 ${live.length ? live.map((r) => `${r.id}(${ruleText(r)}, ${r.status})`).join(', ') : '없음'}입니다. 이 안의 PR은 검수 통과 뒤 바로 자동 머지하고, 밖이면 AI 교차검증을 거칩니다. 지금 교차검증 대기는 ${waiting.length}건입니다. 교차검증 뒤 머지한 건은 관찰 기간 동안 장애·revert가 없을 때만 학습 근거가 되고, 같은 경로에서 근거가 모이면 기준을 제안해 안전 장치 안이면 재무 AI가, 밖이면 사람(태윤)이 승인합니다. 기준으로 머지한 PR이 장애에 연결되면 그 기준은 바로 꺼집니다.`,
     }
   }
   if (has('장애', '사건', '롤백', 'incident')) {

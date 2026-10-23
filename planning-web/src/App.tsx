@@ -6,7 +6,8 @@ import { useSharedStore } from './store'
 import { DeptSimulator } from './depts'
 import { Dep, Point } from './parts'
 import { AssistantBody, AssistantComposer, useAssistantChat } from './assistant'
-import { Activity, Aftercare, Audit, Autonomy, Links, Metrics, Ops, REQUEST_VIEWS, Requests, Reviews, Specs, Work, type RequestView } from './pages'
+import { Activity, Aftercare, Audit, Autonomy, Links, Metrics, Ops, Reviews, Specs, Work } from './pages'
+import { Requests, incomingCount } from './requests'
 import { Docs } from './docs'
 import { Talk } from './talk'
 import { COMPANY, findSiteIcon } from './company'
@@ -18,12 +19,7 @@ type IconName = NonNullable<NavItem['icon']>
 interface Section { label: string; icon: IconName; tabs: { id: string; label: string }[] }
 const SECTIONS = {
   projects: { label: '프로젝트', icon: 'menu', tabs: [] },
-  requests: { label: '요청', icon: 'bell', tabs: [
-    { id: 'incoming', label: '들어온 요청' },
-    { id: 'progress', label: '진행 중인 요청' },
-    { id: 'done', label: '해결된 요청' },
-    { id: 'followup', label: '후속 요청' },
-  ] },
+  requests: { label: '요청', icon: 'bell', tabs: [] }, // 들어온·진행 중·해결·후속은 화면 안 필터 (#/requests/<필터>)
   work: { label: '작업', icon: 'plan', tabs: [
     { id: 'specs', label: '기획·기획서' },
     { id: 'prs', label: '작업·PR' },
@@ -46,7 +42,7 @@ type SectionId = keyof typeof SECTIONS
 const isSection = (x: string): x is SectionId => x in SECTIONS
 
 function useRoute(): string {
-  const read = () => location.hash.replace(/^#\/?/, '') || 'requests/incoming'
+  const read = () => location.hash.replace(/^#\/?/, '') || 'requests'
   const [r, setR] = useState(read)
   useEffect(() => {
     const on = () => setR(read())
@@ -95,7 +91,7 @@ export function App() {
   const [item, item2] = (tabs.length ? rest : [sub, ...rest]).map((x) => (x ? decodeURIComponent(x) : undefined))
   // 없는 화면 주소(예: 예전 '참여한 사건')는 들어온 요청으로 돌린다
   useEffect(() => {
-    if (!planning && section !== 'depts') location.replace('#/requests/incoming')
+    if (!planning && section !== 'depts') location.replace('#/requests')
   }, [planning, section])
 
   // 다른 부서에서 들어온 것: 기획개발 화면(요청·작업)을 볼 때까지 "새로"로 센다
@@ -112,7 +108,7 @@ export function App() {
   }, [section, state.seq]) // eslint-disable-line react-hooks/exhaustive-deps
   const newWork = inbound.filter((x) => x.point !== 'message' && (x.seq ?? 0) > seenSeq).length
   const newTalk = inbound.filter((x) => x.point === 'message' && (x.seq ?? 0) > talkSeen).length
-  const incoming = state.requests.filter(REQUEST_VIEWS.incoming.match).length
+  const incoming = incomingCount(state)
   const unreadOut = state.outbox.filter((m) => !m.read).length
   const recentIn = inbound.filter((x) => x.point !== 'message').slice(-3).reverse()
 
@@ -140,7 +136,7 @@ export function App() {
           <span style={{ flex: 1, minWidth: 0 }}>
             <b>기획개발팀</b> <span style={{ color: 'var(--text-3)' }}>{COMPANY.name} · {COMPANY.tagline}</span>
           </span>
-          <Chip tone={connected ? 'green' : 'amber'} title={connected ? '시연용 목 데이터(PLANNING_MOCK=1). 연동 버스(127.0.0.1:8790)에 연결되어 기획개발(3002)과 다른 부서(3003) 화면이 같은 데이터를 봅니다.' : '시연용 목 데이터(PLANNING_MOCK=1). 연동 버스에 연결되지 않아 이 화면 혼자 동작합니다.'}>
+          <Chip tone={connected ? 'green' : 'amber'} title={connected ? '시연용 목 데이터(PLANNING_MOCK=1). 연동 버스(127.0.0.1:8790)에 연결되어 기획개발(5173)과 다른 부서(5174) 화면이 같은 데이터를 봅니다.' : '시연용 목 데이터(PLANNING_MOCK=1). 연동 버스에 연결되지 않아 이 화면 혼자 동작합니다.'}>
             {connected ? '시연 데이터 · 연동 중' : '시연 데이터 · 단독'}
           </Chip>
           <ToastOutlet />
@@ -166,7 +162,7 @@ export function App() {
           {tabs.length > 0 && (
             <div className="subtabs" role="tablist" aria-label={`${SECTIONS[section].label} 메뉴`}>
               {tabs.map((t) => {
-                const n = section === 'requests' ? state.requests.filter(REQUEST_VIEWS[t.id as RequestView].match).length : section === 'work' && t.id === 'reviews' ? state.reviews.filter((x) => !x.result).length : 0
+                const n = section === 'work' && t.id === 'reviews' ? state.reviews.filter((x) => !x.result).length : 0
                 return (
                   <a key={t.id} href={`#/${section}/${t.id}`} className={t.id === tab ? 'on' : ''} role="tab" aria-selected={t.id === tab}>
                     {t.label}
@@ -186,7 +182,7 @@ export function App() {
               ))}
             </div>
           )}
-          {section === 'requests' && <Requests key={tab} s={state} d={dispatch} view={tab as RequestView} item={item} />}
+          {section === 'requests' && <Requests s={state} d={dispatch} filter={sub} item={rest[0] ? decodeURIComponent(rest[0]) : undefined} />}
           {section === 'work' && tab === 'specs' && <Specs s={state} d={dispatch} item={item} item2={item2} />}
           {section === 'work' && tab === 'prs' && <Work s={state} d={dispatch} item={item} />}
           {section === 'work' && tab === 'reviews' && <Reviews s={state} d={dispatch} item={item} />}

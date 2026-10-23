@@ -5,7 +5,9 @@ import type { Dept, Request, State } from './data'
 
 // 후속 요청 = 장애 뒤 재발 방지(link_incident)처럼 끝난 일에서 이어진 요청
 export const isFollowUp = (r: Request) => r.via.includes('재발 방지')
-export function requestView(r: Request): 'incoming' | 'progress' | 'done' | 'followup' {
+// 요청 탭 필터 주소. 같은 요청으로 연결만 한 것은 원래 요청 줄이 보이는 '전체'로
+export function requestView(r: Request): 'all' | 'incoming' | 'progress' | 'done' | 'followup' {
+  if (r.state === '중복 연결') return 'all'
   if (isFollowUp(r)) return 'followup'
   if (r.state === '접수') return 'incoming'
   if (r.state === '기획 중' || r.state === '작업 중') return 'progress'
