@@ -61,6 +61,22 @@ export function speaker(dept: string | null | undefined): string {
 
 export const INCIDENT_STATUS_KO: Record<string, string> = { open: "진행 중", resolved: "해결", degraded: "일부 미완료" };
 
+// 사건 이름. 총괄은 "payment 장애 감지 (error_rate_5xx)"처럼 코드로 주므로 사람이 읽는 말로 바꾼다
+const COMPONENT_KO: Record<string, string> = { payment: "결제", api: "판매 사이트", db: "주문 DB", search: "검색", shipping: "배송" };
+const METRIC_KO: Record<string, string> = {
+  error_rate_5xx: "서버 오류(5xx) 급증", p95_latency_ms: "응답 지연", order_fail_rate: "주문 실패율 상승", payment_fail_rate: "결제 실패율 상승",
+};
+/** 총괄 제목 끝의 "(metric)"에서 지표 코드를 꺼낸다 */
+function metricOf(inc: OrchIncident): string | null {
+  return /\(([^)]+)\)\s*$/.exec(inc.title)?.[1] ?? null;
+}
+/** 방 이름: "결제 장애 — 서버 오류(5xx) 급증" */
+export function incidentTitle(inc: OrchIncident): string {
+  const comp = COMPONENT_KO[inc.component] ?? inc.component;
+  const metric = metricOf(inc);
+  return metric ? `${comp} 장애 — ${METRIC_KO[metric] ?? metric}` : `${comp} 장애`;
+}
+
 const ACTION_KO: Record<string, string> = {
   issue_coupon: "쿠폰 지급", refund_request: "환불", confirm_settlement: "판매자 정산 확정",
   seller_review: "판매자 입점 승인", settlement_hold: "판매자 정산 멈춤", publish_notice: "공지 올리기",
@@ -189,8 +205,8 @@ export function incidentItems(inc: OrchIncident): ChatItem[] {
   const room = inc.context_id;
   const out: ChatItem[] = [];
   const opened = inc.opened_at ?? inc.events[0]?.at ?? "";
-  out.push({ kind: "separator", id: `${room}:sep`, at: opened, room, text: `${inc.title} · ${inc.context_id}`, variant: "topic" });
-  out.push({ kind: "system", id: `${room}:open`, at: opened, room, text: `판매 사이트 이상 신호(${inc.component})로 사건이 열렸습니다.` });
+  out.push({ kind: "separator", id: `${room}:sep`, at: opened, room, text: `${incidentTitle(inc)} · ${inc.context_id}`, variant: "topic" });
+  out.push({ kind: "system", id: `${room}:open`, at: opened, room, text: `판매 사이트에서 ${incidentTitle(inc)} 신호가 와서 사건이 열렸습니다.` });
 
   for (const step of inc.steps) {
     const sid = `${room}:${step.step_id}`;

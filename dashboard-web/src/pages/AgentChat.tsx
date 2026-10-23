@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
-  ALL_ROOM, INCIDENT_STATUS_KO, SAFETY_ROOM, buildTimeline, messageCount,
+  ALL_ROOM, INCIDENT_STATUS_KO, SAFETY_ROOM, buildTimeline, incidentTitle, messageCount,
   type ChatItem, type DemoRequest, type OrchIncident, type Tone,
 } from "@/lib/agentChat";
 import { finance, type ExecutionRecord } from "@/lib/finance";
@@ -14,6 +14,16 @@ const POLL_MS = 3000;
 const ORCH_CMD = "cd ax-backend && ORCHESTRATOR_MOCK=1 uv run uvicorn ax_orchestrator.main:app --app-dir orchestrator/src --port 8000";
 
 type Conn = "unknown" | "on" | "off";
+
+// 이 화면에서 시작한 사건이 어느 시나리오였는지 기억한다 (방 이름에 쓰는 편의 기능, 없어도 동작)
+const SCENARIO_KEY = "agentChat.scenarios";
+function loadScenarioNames(): Record<string, string> {
+  try { return JSON.parse(localStorage.getItem(SCENARIO_KEY) ?? "{}") as Record<string, string>; } catch { return {}; }
+}
+function saveScenarioNames(v: Record<string, string>) {
+  try { localStorage.setItem(SCENARIO_KEY, JSON.stringify(v)); } catch { /* 저장 못 해도 화면은 그대로 */ }
+}
+const clock = (iso: string | null) => (iso ? new Date(iso).toLocaleTimeString("ko-KR", { hour: "numeric", minute: "2-digit" }) : "");
 
 // ---------------------------------------------------------------- 부서별 말풍선 색 (디자인 토큰만 사용)
 const BUBBLE: Record<string, { bubble: string; avatar: string }> = {
@@ -175,7 +185,7 @@ function RoomList({ rooms, selected, unseen, onSelect }: { rooms: Room[]; select
                 {(r.sub || r.status) && (
                   <div className="mt-1 flex items-center gap-1.5">
                     {r.status && <span className={`chip ${STATUS_TONE[r.status] ?? "bg-ink-100 text-ink-500"}`}>{INCIDENT_STATUS_KO[r.status] ?? r.status}</span>}
-                    {r.sub && <span className="truncate font-mono text-[10px] text-ink-500">{r.sub}</span>}
+                    {r.sub && <span className="truncate text-[11px] text-ink-500">{r.sub}</span>}
                   </div>
                 )}
               </button>
@@ -224,6 +234,7 @@ export default function AgentChat() {
   const [demo, setDemo] = useState<DemoRequest>({ hold_coupon: true });
   const picked = SCENARIOS.find((s) => s.id === scenario) ?? SCENARIOS[0];
   const [starting, setStarting] = useState(false);
+  const [scenarioNames, setScenarioNames] = useState<Record<string, string>>(loadScenarioNames);
   const [busyHold, setBusyHold] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -251,9 +262,18 @@ export default function AgentChat() {
 
   const rooms: Room[] = useMemo(() => [
     { id: ALL_ROOM, title: "전체", count: counts[ALL_ROOM] ?? 0 },
-    ...[...incidents].reverse().map((inc) => ({ id: inc.context_id, title: inc.title, sub: inc.context_id, status: inc.status, count: counts[inc.context_id] ?? 0 })),
+    ...[...incidents].reverse().map((inc) => {
+      const name = scenarioNames[inc.context_id];
+      return {
+        id: inc.context_id,
+        title: name ?? incidentTitle(inc),
+        sub: `${name ? `${incidentTitle(inc)} · ` : ""}${clock(inc.opened_at)} 시작`,
+        status: inc.status,
+        count: counts[inc.context_id] ?? 0,
+      };
+    }),
     { id: SAFETY_ROOM, title: "안전 관문(돈이 나가는 일)", sub: safetyConn === "off" ? "연결 안 됨" : undefined, count: counts[SAFETY_ROOM] ?? 0 },
-  ], [incidents, counts, safetyConn]);
+  ], [incidents, counts, safetyConn, scenarioNames]);
 
   // 지금 보고 있는 방은 읽음 처리
   useEffect(() => { setSeen((s) => (s[room] === counts[room] ? s : { ...s, [room]: counts[room] ?? 0 })); }, [room, counts]);
@@ -292,6 +312,13 @@ export default function AgentChat() {
     try {
       const req = scenario === "custom" ? demo : scenario === "random" ? randomDemo() : picked.req;
       const { context_id } = await orchestrator.startDemo(req);
+      // 진행 중인 사건에 합쳐지면 이미 붙은 이름을 덮지 않는다
+      setScenarioNames((m) => {
+        if (m[context_id]) return m;
+        const next = { ...m, [context_id]: scenario === "custom" ? "직접 고른 시나리오" : picked.label };
+        saveScenarioNames(next);
+        return next;
+      });
       await refresh();
       setRoom(context_id);
     } catch (e) {
