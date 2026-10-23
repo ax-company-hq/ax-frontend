@@ -36,6 +36,8 @@ npm run build -w planning-web
 - `src/data.ts`의 리듀서를 바꾸면 버스를 다시 띄운다(버스가 같은 파일을 읽는다).
 - 요청이 들어오면 버스가 1.2초마다 한 단계씩 처리한다(`BUS_STEP_MS`로 조정). 기획서 질문의 답·교차검증 판단·기준 넓히기 판단은 다른 부서 화면(3003)이 그 부서 에이전트로서 보낸다.
 
+- 버스를 `PLANNING_API_URL=http://127.0.0.1:8101 npm run bus:planning`으로 띄우면 다른 부서가 보낸 요청(`inbound`·`answerQuestion`)과 처음으로(reset)를 planning 백엔드(목 모드)에도 넘긴다. 화면은 버스를 보고, 백엔드 상태는 `GET :8101/api/planning/state`로 본다.
+
 ### 관리자 한 포트에 합칠 때
 
 - `PLANNING_WEB_BASE=/admin/planning/ npm run build -w @ax/planning-web` — 자산 경로만 바뀌고, 화면 이동은 해시(`#/...`)라 그대로 동작한다.
