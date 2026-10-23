@@ -1,4 +1,4 @@
-import type { DemoOptions, Incident, Registry } from './types'
+import type { DemoOptions, Department, Incident } from './types'
 
 // 개발 서버(vite)가 /orch를 총괄로 넘겨 준다 (vite.config.ts). 총괄에는 CORS가 없다.
 const BASE = '/orch'
@@ -37,7 +37,8 @@ export async function listIncidents(): Promise<{ incidents: Incident[]; mock: bo
   const { data, meta } = await requestEnvelope<Incident[]>('/api/incidents')
   return { incidents: data, mock: meta.mock === true }
 }
-export const getRegistry = () => request<Registry>('/api/registry')
+/** 부서별 카드·skill·사용량(총괄이 부른 호출을 센 실측). 부서 카드와 상세 화면이 쓴다 */
+export const getDepartments = () => request<Department[]>('/api/departments')
 
 export const injectIncident = (options: DemoOptions) =>
   request<{ context_id: string }>('/api/demo/incidents', {

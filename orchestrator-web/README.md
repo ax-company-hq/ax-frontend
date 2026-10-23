@@ -64,7 +64,10 @@ $env:ORCHESTRATOR_PROXY_TARGET="http://localhost:8002"; npm run dev:orchestrator
    - 공지 게시 1회 실패: 재시도로 복구됩니다.
    - 공지 게시 거절(이관 큐로 넘김): 소관 부서를 찾지 못하면 지어내지 않고 단계에 "이관 큐"로 표시하며, 사건은 일부 미완료로 끝납니다.
    - 인프라 카드 비어 있음: 진단 단계가 건너뛰어지고 일부 미완료로 끝납니다.
-3. 오른쪽 **부서 에이전트(Agent Card)** 에는 부서별 skill이 보이고, 부서 이름 옆에 `목`/`실제`가 표시됩니다.
+3. 아래 **부서 에이전트** 영역에 부서(인프라·데이터분석·기획개발·마케팅·고객지원·재무/정산·인사운영)별 카드가 있습니다. 카드를 누르면 그 부서의 세부 내용이 오른쪽에 뜹니다.
+   - 호출 수·성공률·평균 응답 시간·재시도 타일과 최근 10분 사용량 그래프(막대: 30초당 호출 수, 빨강은 오류, 노랑 선은 평균 응답 시간)
+   - skill별 사용 현황(호출 추이, 성공률, 평균 응답), 이번 사건에서 맡은 일, 최근 호출 기록
+   - 부서 이름 옆에 `목`/`실제`가 표시됩니다. 사용량은 **총괄이 그 부서를 부른 호출을 센 실측값**이라 장애를 주입해야 쌓입니다(부서 내부의 CPU·메모리는 총괄이 알 수 없어서 그리지 않습니다).
 
 ### 내 에이전트만 실제로 붙여 보기
 내 에이전트를 먼저 띄우고, 터미널 1에서 총괄을 띄울 때 내 부서를 지정합니다.
@@ -84,4 +87,5 @@ ORCHESTRATOR_REAL_DEPTS=finance uv run python -m ax_orchestrator --port 8000 --n
 ## 구조
 - `src/App.tsx` 화면 전체, `src/api.ts` 총괄 API 호출, `src/types.ts` 응답 타입
 - 개발 서버가 `/orch/*`를 총괄 백엔드로 대신 보냅니다(`vite.config.ts`). 총괄에는 CORS가 없어서 브라우저가 직접 부르지 않습니다. `dashboard-web`의 AI 대화방과 같은 방식입니다.
-- 총괄 API: `GET /api/incidents`, `GET /api/registry`, `POST /api/demo/incidents`, `POST /api/incidents/{ctx}/holds/{step}`
+- 총괄 API: `GET /api/incidents`, `GET /api/departments`(부서별 카드·skill·사용량), `POST /api/demo/incidents`, `POST /api/incidents/{ctx}/holds/{step}`(목 모드만)
+- `src/components/Departments.tsx` 부서 카드 목록과 상세, `src/components/Charts.tsx` 사용량 그래프, `src/deptLabels.ts` 부서 한글 이름·설명

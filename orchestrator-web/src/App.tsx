@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import { decideHold, getRegistry, injectIncident, listIncidents, OrchestratorUnreachable } from './api'
-import type { DemoOptions, Incident, Registry, StepStatus } from './types'
+import { decideHold, getDepartments, injectIncident, listIncidents, OrchestratorUnreachable } from './api'
+import { Departments } from './components/Departments'
+import type { DemoOptions, Department, Incident, StepStatus } from './types'
 
 const STATUS_LABEL: Record<StepStatus, string> = {
   pending: '대기',
@@ -31,7 +32,7 @@ const OPTION_LABELS: [keyof DemoOptions, string][] = [
 const HOLD_QUEUE_URL = `${import.meta.env.VITE_DASHBOARD_WEB_URL || 'http://localhost:3001'}/finance`
 
 const kst = (iso: string | null) =>
-  iso ? new Date(iso).toLocaleTimeString('ko-KR', { hour12: false }) : ''
+  iso ? new Date(iso).toLocaleTimeString('en-GB', { timeZone: 'Asia/Seoul' }) : ''
 
 const NO_OPTIONS: DemoOptions = {
   hold_rollback: false,
@@ -42,7 +43,7 @@ const NO_OPTIONS: DemoOptions = {
 
 export function App() {
   const [incidents, setIncidents] = useState<Incident[]>([])
-  const [registry, setRegistry] = useState<Registry | null>(null)
+  const [depts, setDepts] = useState<Department[] | null>(null)
   const [options, setOptions] = useState<DemoOptions>(NO_OPTIONS)
   const [pinned, setPinned] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -50,9 +51,9 @@ export function App() {
   const [mock, setMock] = useState(true)
   const flowRef = useRef<HTMLElement>(null)
 
-  const refreshRegistry = useCallback(async () => {
+  const refreshDepartments = useCallback(async () => {
     try {
-      setRegistry(await getRegistry())
+      setDepts(await getDepartments())
     } catch (e) {
       if (e instanceof OrchestratorUnreachable) setError(e.message)
     }
@@ -71,10 +72,14 @@ export function App() {
 
   useEffect(() => {
     void tick()
-    void refreshRegistry()
+    void refreshDepartments()
     const timer = setInterval(() => void tick(), 800)
-    return () => clearInterval(timer)
-  }, [tick, refreshRegistry])
+    const deptTimer = setInterval(() => void refreshDepartments(), 2000)
+    return () => {
+      clearInterval(timer)
+      clearInterval(deptTimer)
+    }
+  }, [tick, refreshDepartments])
 
   const latest = incidents[incidents.length - 1]
   const current =
@@ -85,7 +90,7 @@ export function App() {
     try {
       const created = await injectIncident(options)
       setPinned(created.context_id)
-      await refreshRegistry()
+      await refreshDepartments()
       await tick()
       flowRef.current?.scrollIntoView({ behavior: 'smooth' })
     } catch (e) {
@@ -117,7 +122,7 @@ export function App() {
         <div className="wrap">
           <span className="logo">axcompany</span>
           <a className="item" href="#flow">사건 흐름</a>
-          <a className="item" href="#registry">부서 에이전트</a>
+          <a className="item" href="#departments">부서 에이전트</a>
           <a className="item" href="#holds">승인 대기열</a>
           <a className="item" href="#kpi">KPI</a>
           <span className="sp" />
@@ -230,45 +235,7 @@ export function App() {
               </div>
             </div>
 
-            <div className="card" id="registry">
-              <h3>
-                <span>부서 에이전트 (Agent Card)</span>
-                <span className="pill">skill → 부서</span>
-              </h3>
-              {registry ? (
-                registry.depts.map((d) => (
-                  <div className="dept" key={d.name}>
-                    <b>{d.name}</b>
-                    <small>{d.owner}</small>
-                    <span className={`grade ${d.mode === 'real' ? 'A' : ''}`}>
-                      {d.mode === 'real' ? '실제' : '목'}
-                    </span>
-                    <div className="skills">
-                      {d.skills
-                        .filter((s) => s.orchestrator)
-                        .map((s) => (
-                          <span key={s.id} className={`skill ${s.grade}`}>
-                            {s.id} · {s.grade}
-                          </span>
-                        ))}
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="empty">카드를 수집하는 중이에요.</div>
-              )}
-              {registry && Object.keys(registry.unavailable).length > 0 && (
-                <div className="warn">
-                  확인할 수 없음:{' '}
-                  {Object.entries(registry.unavailable)
-                    .map(([k, v]) => `${k} (${v})`)
-                    .join(', ')}
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="grid2">
+            <div className="stack">
             <div className="card" id="holds">
               <h3>
                 <span>승인 대기열</span>
@@ -348,7 +315,16 @@ export function App() {
                 )}
               </div>
             </div>
+            </div>
           </div>
+        </section>
+
+        <section className="stage" id="departments">
+          <div className="section-head">
+            <h2>부서 에이전트</h2>
+            <span className="pill">부서 카드를 누르면 세부 내용이 보여요</span>
+          </div>
+          <Departments depts={depts} steps={current?.steps ?? []} />
         </section>
         <footer>
           목업 · 실제 부서 연동 전 단계. 총괄은 승인하지 않고, 승인 버튼은 사람이 누르는 대시보드 동작을 흉내 낸 것입니다.

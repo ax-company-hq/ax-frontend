@@ -56,30 +56,63 @@ export interface Incident {
   pending_holds: PendingHold[]
 }
 
-export interface RegistrySkill {
-  id: string
-  grade: string
-  priority: string
-  orchestrator: boolean
-}
-
-export interface RegistryDept {
-  name: string
-  owner: string
-  mode?: 'real' | 'mock'
-  skills: RegistrySkill[]
-}
-
-export interface Registry {
-  depts: RegistryDept[]
-  unavailable: Record<string, string>
-  conflicts: string[]
-}
-
 /** 장애 주입 옵션. 각 옵션은 가짜 부서의 동작을 바꾼다. */
 export interface DemoOptions {
   hold_rollback: boolean
   fail_marketing: boolean
   wrong_owner: boolean
   infra_card_empty: boolean
+}
+
+/** 부서 호출 사용량 한 구간(30초). 총괄이 부른 호출을 센 값이다. */
+export interface SeriesPoint {
+  t: string
+  calls: number
+  errors: number
+  avg_ms: number | null
+}
+
+export interface UsageSummary {
+  calls: number
+  errors: number
+  waiting: number
+  success_rate: number | null
+  avg_ms: number | null
+  p95_ms: number | null
+  retries: number
+  last_called_at: string | null
+}
+
+export interface SkillUsage {
+  id: string
+  grade: string
+  priority: string
+  orchestrator: boolean
+  calls: number
+  errors: number
+  success_rate: number | null
+  avg_ms: number | null
+  retries: number
+  series: SeriesPoint[]
+}
+
+export interface RecentCall {
+  at: string
+  skill: string
+  status: string
+  outcome: string | null
+  duration_ms: number
+  context_id: string
+}
+
+export interface Department {
+  name: string
+  owner: string | null
+  mode: 'real' | 'mock'
+  available: boolean
+  unavailable_reason: string | null
+  skills: SkillUsage[]
+  usage: UsageSummary
+  series: SeriesPoint[]
+  recent: RecentCall[]
 }
