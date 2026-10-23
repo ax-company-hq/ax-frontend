@@ -26,7 +26,7 @@ export default function OrdersPage() {
 
   return (
     <RequireLogin user={user} ready={ready}>
-      <PageTitle title="주문·배송" sub="영수증 확인, 취소·반품·교환, 후기 작성은 주문 상세에서 할 수 있어요." right={<Link href="/support" className="btn-ghost text-sm">1:1 문의</Link>} />
+      <PageTitle title="주문·배송" sub="영수증 확인, 취소·반품·교환, 후기 작성은 주문 상세에서 할 수 있어요." right={<div className="flex gap-2"><Link href="/ax-orders" className="btn-ghost text-sm">ax 주문·신청</Link><Link href="/support" className="btn-ghost text-sm">1:1 문의</Link></div>} />
       <ErrorNote error={error} />
       {claims.filter((c) => !["completed", "rejected", "withdrawn"].includes(c.status)).length > 0 && (
         <section className="mb-8">
