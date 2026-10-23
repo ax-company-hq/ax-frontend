@@ -10,7 +10,7 @@
 
 - 이 콘솔은 **개발 서버가 총괄을 직접 부릅니다**(`/orch` 프록시). 개발 서버에서만 동작하고, 배포 빌드에서 쓰려면 `dashboard-api`를 거치는 경로가 필요합니다(ax-backend #255 진행 중). 그전까지는 로컬 시연·연동 확인용입니다.
 - 장애 주입 버튼과 가짜 부서 옵션은 개발용 기능이라 운영 화면(관리자)에는 넣지 않습니다.
-- 관리자 아래에 붙일 때는 `planning-web`처럼 기준 경로를 바꿉니다: `ORCHESTRATOR_WEB_BASE=/admin/orchestrator/ npm run build -w orchestrator-web`.
+- 관리자 아래에 붙일 때는 `planning-web`처럼 기준 경로를 바꿉니다: `ORCHESTRATOR_WEB_BASE=/admin/orchestrator/ npm run build -w orchestrator-web`. (Windows Git Bash는 `/`로 시작하는 값을 경로로 바꿔 버려서 앞에 `MSYS_NO_PATHCONV=1`을 붙인다.)
 
 > 값은 모두 지어낸 목 데이터이고 화면 위에도 `MOCK`이라고 표시됩니다. 총괄은 승인하지 않고, "승인" 버튼은 사람이 누르는 대시보드 동작을 흉내 낸 것입니다.
 
