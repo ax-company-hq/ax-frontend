@@ -1,7 +1,7 @@
-// 기획개발팀 탭의 하위 화면. 요청·작업·운영·사후관리·교차검증은 프로젝트 탭과 같은 틀(왼쪽 목록 / 가운데 세로 흐름 / 오른쪽 곁 블록)을 쓴다
+// 기획개발팀 탭의 하위 화면. 작업·운영·사후관리·교차검증은 프로젝트 탭과 같은 틀(왼쪽 목록 / 가운데 세로 흐름 / 오른쪽 곁 블록)을 쓴다
 import { useEffect, useState, type Dispatch, type ReactNode } from 'react'
 import { Button, Card, Notice, useToast, type Column } from '@dejafix/common-frontend'
-import { DEPT_NAME, IRREVERSIBLE, PORTS, TARGET_LABEL, TODAY, TRIAL_RUNS, activeRules, ruleText, type Action, type Activity as Act, type AuditItem, type AutoRule, type CrossReview, type Dept, type PR, type Request, type State as S } from './data'
+import { DEPT_NAME, IRREVERSIBLE, PORTS, TARGET_LABEL, TODAY, GUARD, OBSERVE_MIN, OBSERVE_N, activeRules, ruleText, type Action, type Activity as Act, type AuditItem, type AutoRule, type CrossReview, type Dept, type PR, type Request, type State as S } from './data'
 import { codeOf, traceOf, type CodeLine } from './trace'
 import { ActivityList, Dep, Grade, Lead, LinkTable, Point, Sec, State, Stats, rowNav, Tag } from './parts'
 import { Linked, Ref, convoHref, go, hrefOf, isFollowUp, nextOf, prFromSlug, prSlug, reviewOf } from './links'
@@ -11,65 +11,7 @@ import { SendWindow } from './depts'
 
 interface P { s: S; d: Dispatch<Action> }
 
-// ---------------------------------------------------------------- 요청 (들어온·진행 중·해결됨·후속)
-export type RequestView = 'incoming' | 'progress' | 'done' | 'followup'
-// 후속 요청(isFollowUp) = 장애 뒤 재발 방지(link_incident)처럼 끝난 일에서 이어진 요청. 다른 세 화면에서는 뺀다
-export { isFollowUp }
-export const REQUEST_VIEWS: Record<RequestView, { title: string; match: (r: Request) => boolean }> = {
-  incoming: { title: '들어온 요청', match: (r) => !isFollowUp(r) && r.state === '접수' },
-  progress: { title: '진행 중인 요청', match: (r) => !isFollowUp(r) && (r.state === '기획 중' || r.state === '작업 중') },
-  done: { title: '해결된 요청', match: (r) => !isFollowUp(r) && (r.state === '완료' || r.state === '중복 연결') },
-  followup: { title: '후속 요청', match: isFollowUp },
-}
-
-export function Requests({ s, d, view, item }: P & { view: RequestView; item?: string }) {
-  const toast = useToast()
-  const v = REQUEST_VIEWS[view]
-  const rows = s.requests.filter(v.match)
-  const r = rows.find((x) => x.id === item) ?? rows[0]
-  const list = <ListPane empty={`${v.title} 없음`} groups={[{ label: v.title, rows: rows.map((x) => ({ key: x.id, href: `#/requests/${view}/${x.id}`, on: x.id === r?.id, title: x.title, meta: <>{x.id} · {DEPT_NAME[x.from]} <State v={x.state} /></> })) }]} />
-  if (!r) return <Layout list={list}><div className="empty"><b>{v.title} 없음</b></div></Layout>
-  const g = gather(s, r)
-  const next = nextOf(s, r)
-  const draft = (r.state === '접수' || (r.state === '기획 중' && !g.spec))
-  return (
-    <Layout
-      list={list}
-      head={<Head kicker={<>{r.id} · {DEPT_NAME[r.from]} · <Point>{r.via}</Point></>} title={r.title} side={<State v={r.state} />} />}
-      side={
-        <>
-          <Side title="다음">
-            <div className="actions">
-              {draft && (r.from === 'hr' || r.from === 'data') && r.state === '접수'
-                ? <Button variant="primary" onClick={() => { d({ type: 'acceptDraft', request: r.id }); toast.show(`${r.id} 채택 · 기획서 초안`) }}>채택 · 기획서 초안</Button>
-                : draft
-                  ? <Button variant="primary" onClick={() => { d({ type: 'writeSpec', request: r.id }); toast.show(`${r.id} 기획서 초안`) }}>기획서 초안 만들기</Button>
-                  : <Button variant="primary" onClick={() => go(next.href)}>{next.label}</Button>}
-              <Button onClick={() => go(`#/projects/${r.duplicateOf ?? r.id}`)}>프로젝트</Button>
-            </div>
-          </Side>
-          <Side title="근거"><p className="pside-msg"><Linked s={s} text={r.evidence} /></p></Side>
-          <Side title="같은 요청" sum={r.duplicateOf ? undefined : `${g.dups.length}건`}>
-            {r.duplicateOf && <p className="pside-msg">원본 <Ref s={s} id={r.duplicateOf} /></p>}
-            {g.dups.map((x) => <p key={x.id} className="pside-msg"><Ref s={s} id={x.id} /> · {DEPT_NAME[x.from]}</p>)}
-          </Side>
-          {r.auto && (
-            <Side title="간단 요청" sum={r.auto.ok ? '해당' : '해당 없음'}>
-              {r.auto.reasons.map((x) => <p key={x} className="pside-msg">{x}</p>)}
-            </Side>
-          )}
-        </>
-      }
-    >
-      <Flow>
-        <Step name="접수" on href={convoHref(r.ctx)} title={DEPT_NAME[r.from]}><p className="muted mono">{r.ctx}</p></Step>
-        <Step name="기획서" on={!!g.spec} href={g.spec ? `#/work/specs/${g.spec.id}` : undefined} title={g.spec ? `${g.spec.id} · ${specStatus(s, g.spec)}` : '없음'} />
-        <Step name="작업" on={g.tasks.length > 0} href={g.prs[0] ? `#/work/prs/${prSlug(g.prs[0].id)}` : undefined} title={g.tasks.length ? `작업 ${g.tasks.length} · ${g.prs.length ? prStatus(s, g.prs) : 'PR 없음'}` : '없음'} />
-        <Step name="처리" on={r.state === '완료'} href={g.incidents[0] ? hrefOf(s, g.incidents[0].ctx) : r.state === '완료' ? `#/projects/${r.id}` : undefined} title={doneLabel(r, g)} />
-      </Flow>
-    </Layout>
-  )
-}
+// 요청 탭은 requests.tsx (모든 요청의 단계 한눈에)
 
 // ---------------------------------------------------------------- 기획 문서 (문서가 원본, 문단에 모든 것이 붙는다)
 export function Specs({ s, d, item, item2 }: P & { item?: string; item2?: string }) {
@@ -83,7 +25,6 @@ export function Specs({ s, d, item, item2 }: P & { item?: string; item2?: string
   const decisions = s.decisions.filter((x) => x.spec === spec.id)
   const thread = s.threads.find((t) => t.on === spec.id)
   const inc = s.incidents.find((i) => i.candidates.some((c) => c.spec === spec.id && c.para === para.id))
-  const canGenerate = spec.status === '확정' && s.tasks.some((t) => t.spec === spec.id && t.state === '진행 중')
   const xr = reviewOf(s, spec.id)
   const answer = spec.id === 'SPEC-7' ? '재고가 없어진 상품은 남기되 품절로 표시해 주세요.' : '화면 문구만 바꿔 주세요.'
 
@@ -114,9 +55,6 @@ export function Specs({ s, d, item, item2 }: P & { item?: string; item2?: string
           <State v={xr ? (xr.lane === 'human' ? '사람 확인 대기' : '교차검증 대기') : spec.status} />
           {spec.confirmedBy && <Tag>{CONFIRMED_BY[spec.confirmedBy]}</Tag>}
           <span style={{ flex: 1 }} />
-          {canGenerate && (
-            <Button variant="dark" icon="sparkle" onClick={() => { d({ type: 'generatePrs', spec: spec.id }); toast.show('generate_pr 실행 → 안전 레이어 규칙 검증 → PR 생성 → 기준 안이면 자동 머지') }}>시연: 에이전트가 PR 생성</Button>
-          )}
         </div>
         <p className="muted small">
           요청 <Ref s={s} id={spec.request} /> · <a href={`#/projects/${spec.request}`}>프로젝트 보기</a> · 에이전트가 작성, 사람이 쓴 문장 {spec.humanSentences}개
@@ -316,14 +254,10 @@ export function Reviews({ s, d, item }: P & { item?: string }) {
               ['자기 승인', r.lane === 'ai' ? '아님 · 기획개발 밖' : '해당 없음'],
               ...(r.irreversible ? [['되돌릴 수 없음', r.irreversible] as [string, string]] : []),
             ]} />
-            {!r.result && (
+            {!r.result && r.lane === 'human' && (
               <div className="actions">
-                {r.lane === 'ai'
-                  ? <Button variant="dark" icon="sparkle" onClick={() => { d({ type: 'decideReview', review: r.id }); toast.show(`${r.verifier} 판단 반영`) }}>시연: 검증자 판단 받기</Button>
-                  : <>
-                      <Button variant="primary" onClick={() => { d({ type: 'humanDecide', review: r.id, ok: true }); toast.show(`${r.ref} 진행`) }}>확인하고 진행</Button>
-                      <Button onClick={() => { d({ type: 'humanDecide', review: r.id, ok: false }); toast.show(`${r.ref} 보류`) }}>보류</Button>
-                    </>}
+                <Button variant="primary" onClick={() => { d({ type: 'humanDecide', review: r.id, ok: true }); toast.show(`${r.ref} 진행`) }}>확인하고 진행</Button>
+                <Button onClick={() => { d({ type: 'humanDecide', review: r.id, ok: false }); toast.show(`${r.ref} 보류`) }}>보류</Button>
               </div>
             )}
           </Side>
@@ -343,23 +277,27 @@ export function Reviews({ s, d, item }: P & { item?: string }) {
         <Step name="판단" on={!!r.result} title={r.result ? `${r.result} · ${r.decidedAt}` : '대기'}>
           {r.resultWhy && <p className="muted">{r.resultWhy}</p>}
         </Step>
-        {r.target === 'merge_pr' && r.lane === 'ai' && (
-          <Step name="학습" on={!!r.learned?.rule} href={r.learned?.rule ? hrefOf(s, r.learned.rule) : undefined} title={!r.learned ? '-' : r.learned.rule ? `${r.learned.rule} 등록 · 시험 중` : '학습 거부'}>
-            {r.learned && (
-              <Pairs items={[
-                ['제안', r.learned.proposal],
-                ...(r.learned.backtest ? [['백테스트', `과거 ${r.learned.backtest.checked} · 해당 ${r.learned.backtest.covered} · 충돌 ${r.learned.backtest.conflicts.length}`] as [string, string]] : []),
-                ...(r.learned.refused ? [['거부', <Linked key="x" s={s} text={r.learned.refused} />] as [string, ReactNode]] : []),
-              ]} />
-            )}
-          </Step>
-        )}
+        {r.target === 'merge_pr' && r.lane === 'ai' && (() => {
+          const o = s.autoPolicy.observing.find((x) => x.pr === r.ref)
+          const rule = s.autoPolicy.rules.find((x) => x.basis.includes(r.ref))
+          return (
+            <Step name="관찰" on={o?.result === '정상'} href={rule ? hrefOf(s, rule.id) : undefined} title={!o ? '-' : rule ? `${rule.id} ${rule.status}` : o.result}>
+              {o && (
+                <Pairs items={[
+                  ['머지', o.mergedAt],
+                  ['관찰', `${OBSERVE_MIN}분 · ${o.result}`],
+                  ...(rule ? [['기준', <Ref key="r" s={s} id={rule.id} />] as [string, ReactNode]] : []),
+                ]} />
+              )}
+            </Step>
+          )
+        })()}
       </Flow>
     </Layout>
   )
 }
 
-// ---------------------------------------------------------------- 자동 처리 범위 (학습된 기준: 한 번 학습 → 백테스트 → 시험 중 → 정식)
+// ---------------------------------------------------------------- 자동 처리 범위 (학습된 기준: 머지 → 관찰 → 제안·백테스트 → 재무 AI·사람 승인 → 정식)
 export function Autonomy({ s, d, item }: P & { item?: string }) {
   const toast = useToast()
   const pol = s.autoPolicy
@@ -369,23 +307,25 @@ export function Autonomy({ s, d, item }: P & { item?: string }) {
   const cols: Column<AutoRule>[] = [
     { key: 'id', header: '기준', render: (r) => <span className="mono">{r.id}</span> },
     { key: 'what', header: '내용', render: (r) => <>{TARGET_LABEL[r.action]} · {ruleText(r)}</> },
-    { key: 'status', header: '상태', render: (r) => <><State v={r.status} />{r.status === '시험 중' && <span className="muted small"> {r.runs.filter((x) => x.result === '정상').length}/{TRIAL_RUNS}건 정상</span>}</> },
-    { key: 'basis', header: '근거 건', render: (r) => <><Ref s={s} id={r.basis} />{r.review && <> · <Ref s={s} id={r.review} /></>}</> },
+    { key: 'status', header: '상태', render: (r) => <State v={r.status} /> },
+    { key: 'approver', header: '넓히기 승인', render: (r) => <span className="small">{r.approver}</span> },
+    { key: 'basis', header: '관찰 통과 머지', render: (r) => <>{r.basis.map((b, i) => <span key={b}>{i > 0 && ' · '}<Ref s={s} id={b} /></span>)}</> },
     { key: 'bt', header: '백테스트', render: (r) => <span className="small">과거 {r.backtest.checked}건 대조 · 기준에 드는 {r.backtest.covered}건 · 충돌 {r.backtest.conflicts.length}건</span> },
     { key: 't', header: '만든 시각', render: (r) => <span className="mono small">{r.t}</span> },
-    { key: 'off', header: '', render: (r) => r.status === '해제됨' ? <span className="muted small">{r.offWhy}</span> : <Button size="small" onClick={() => off(r)}>기준 끄기</Button> },
+    { key: 'off', header: '', render: (r) => r.status === '정식' ? <Button size="small" onClick={() => off(r)}>기준 끄기</Button> : <span className="muted small">{r.offWhy ?? r.decideWhy}</span> },
   ]
   return (
     <>
-      <Lead>교차검증 승인 1건 → 기준 제안 → 백테스트 → 시험 중(처음 {TRIAL_RUNS}건 단계적 배포) → 정식. 장애 연결·사람이 끄면 해제.</Lead>
+      <Lead>머지 → {OBSERVE_MIN}분 관찰(장애·revert 없음) → 같은 경로 {OBSERVE_N}건 → 기준 제안·백테스트 → 안전 장치({GUARD.lines}줄·{GUARD.files}파일) 안 재무 AI / 밖 사람(태윤) 승인 → 정식. 장애 연결·사람이 끄면 즉시 해제.</Lead>
       <Stats items={[
         { label: '정식 기준', value: by('정식') },
-        { label: '시험 중', value: by('시험 중'), hint: `처음 ${TRIAL_RUNS}건 단계적 배포` },
+        { label: '관찰 중', value: pol.observing.filter((o) => o.result === '관찰 중').length, hint: `머지 뒤 ${OBSERVE_MIN}분` },
+        { label: '승인 대기', value: by('승인 대기'), hint: '재무 AI · 사람' },
         { label: '해제됨', value: by('해제됨') },
         { label: '기준으로 자동 머지 / 장애 연결', value: `${pol.history.length} / ${linked}`, hint: '건' },
       ]} />
       <Card as="section" title="학습된 기준" sub="이 범위 안의 PR은 검수 통과 뒤 사람 클릭 없이 머지된다">
-        <LinkTable columns={cols} rows={pol.rules.slice().reverse()} rowKey={(r) => r.id} rowHref={(r) => hrefOf(s, r.review ?? r.basis)} rowTitle="이 기준을 배운 건 보기" highlight={(r) => r.id === item} />
+        <LinkTable columns={cols} rows={pol.rules.slice().reverse()} rowKey={(r) => r.id} rowHref={(r) => hrefOf(s, r.basis[0])} rowTitle="이 기준을 배운 건 보기" highlight={(r) => r.id === item} />
       </Card>
       <div className="auto-grid">
         <Card as="section" title="되돌릴 수 없는 일" sub="교차검증 대신 항상 사람이 확인한다">
@@ -445,7 +385,7 @@ export function Audit({ s, d }: P) {
         { label: '자동 확정', value: n('자동 확정'), hint: '기획서' },
         { label: '자동 머지', value: n('자동 머지'), hint: '학습된 기준으로' },
         { label: '교차검증 승인', value: n('교차검증 승인'), hint: `거절 ${n('교차검증 거절')}`, href: '#/work/reviews' },
-        { label: '학습된 기준', value: n('기준 학습'), hint: `학습 거부 ${n('학습 거부')}`, href: '#/metrics/autonomy' },
+        { label: '정식이 된 기준', value: n('기준 정식'), hint: `제안 ${n('기준 제안')} · 거부 ${n('학습 거부')}`, href: '#/metrics/autonomy' },
       ]} />
       <Card as="section" title="건별 기록" sub={`오늘 ${today.length}건 · 최근 순`}>
         {today.length

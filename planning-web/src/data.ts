@@ -6,7 +6,7 @@
 //   - 기획서: 질문 없음 + 인사 기각 경고 없음 + 근거 있음 → 자동 확정. 아니면 AI 교차검증 대기열.
 //   - PR: 검수 통과 + 학습된 기준(경로·줄·파일·경고 없음) 안 → 자동 머지. 아니면 AI 교차검증 대기열.
 //   - 교차검증은 기획개발이 아닌 쪽(안전 레이어가 다른 부서로 보냄)이 판단한다. 기획개발은 자기 건을 승인하지 않는다.
-//   - 교차검증 승인 건에서 기준을 한 번에 학습 → 과거 기록 백테스트 → 시험 중(처음 3건 단계적 배포·자동 롤백) → 정식.
+//   - 교차검증 뒤 머지 → 관찰 기간 장애·revert 없음 → 같은 경로 N건이면 기준 제안·백테스트 → 안전 장치 안 재무 AI, 밖 사람(태윤) 승인 → 정식.
 //   - 되돌릴 수 없는 일(IRREVERSIBLE)은 교차검증 대신 항상 사람이 확인한다.
 //   - 사람은 사후 감사 화면에서 AI가 스스로 승인한 건을 보고, 기준을 바로 끌 수 있다.
 
@@ -32,6 +32,7 @@ export interface Request {
   spec?: string
   duplicateOf?: string
   auto?: AutoCheck // 간단 요청 판정 결과 (create_ticket으로 들어온 것만)
+  flow?: boolean // 들어온 뒤 사람 클릭 없이 흐름을 이어 간다 (기획서 질문은 요청 부서 에이전트가 답함)
 }
 
 export interface Para {
@@ -147,10 +148,11 @@ export interface CrossReview {
   result?: '승인' | '거절'
   resultWhy?: string
   decidedAt?: string
-  learned?: { rule?: string; refused?: string; proposal: string; backtest?: Backtest }
 }
 
-// ---- 학습된 자동 처리 기준. 교차검증 승인 한 건에서 뽑고, 백테스트를 통과하면 시험 중 → 3건 정상이면 정식
+// ---- 학습된 자동 처리 기준 (#191, 재현·태윤 조건). 학습 근거는 검토자 승인이 아니라 "머지 뒤 장애·revert 없음 + 관찰 기간".
+// 같은 범위에서 관찰을 통과한 머지가 OBSERVE_N건 모이면 기준을 제안하고, 넓히는 쪽은 safety 안전 장치 안이면 재무 AI
+// (review_threshold_change, #124), 밖이면 사람(태윤)이 승인한다. 좁히는 쪽(해제)은 장애·revert 연결 즉시 자동.
 export interface AutoRule {
   id: string // AR-n
   action: ReviewTarget
@@ -158,25 +160,35 @@ export interface AutoRule {
   lines: number // 변경 줄 상한
   files: number // 변경 파일 상한
   noWarn: boolean // 인사 기각 경고가 없는 문단만
-  status: '시험 중' | '정식' | '해제됨'
-  review?: string // 학습한 교차검증 건 (XR-n)
-  basis: string // 근거 건 (PR #n)
+  status: '승인 대기' | '정식' | '거절' | '해제됨'
+  approver: '재무 AI' | '사람 (태윤)' // 넓히기 승인 주체
+  basis: string[] // 관찰을 통과한 머지 PR
   backtest: Backtest
   runs: { pr: string; result: '정상' | '장애 연결' }[] // 이 기준으로 자동 머지한 건
-  t: string // 만든 시각
+  t: string // 제안한 시각
+  decidedAt?: string
+  decideWhy?: string
   offAt?: string
   offWhy?: string
 }
-export const TRIAL_RUNS = 3 // 시험 중 기준이 정식이 되기까지 정상 건수 (시연값)
+// 시연값. 실제 N건·관찰 기간은 safety 기준표(사람 전용 파일, #202)에 둔다
+export const OBSERVE_MIN = 2 // 머지 뒤 관찰 기간 (분)
+export const OBSERVE_N = 2 // 관찰을 통과한 머지 몇 건이면 기준 제안
+export const GUARD = { lines: 100, files: 5 } // safety 안전 장치: 이 안이면 재무 AI가, 밖이면 사람이 승인
+// safety 보호 경로 (#203 merge_protected_paths, 시연 경로 포함). 닿으면 항상 사람 확인이고 학습으로도 풀 수 없다
+export const PROTECTED_PATHS = ['shop-web/checkout/', 'shop-web/auth/', 'shop-web/api/', 'shop-api/db/', 'shop-api/service/', 'shop-api/promotions/', 'shop-api/payment/', '.github/', 'safety/', 'contracts/']
+export const protectedOf = (path: string) => PROTECTED_PATHS.find((x) => path.startsWith(x))
+export interface Observation { pr: string; req: string; path: string; lines: number; files: number; mergedAt: string; untilMs: number; result: '관찰 중' | '정상' | '장애 연결' }
 export interface AutoRun { pr: string; req: string; t: string; lines: number; files: number; result: '정상' | '장애 연결'; rule?: string }
 export interface AutoPolicy {
   rules: AutoRule[]
+  observing: Observation[] // 교차검증 뒤 머지된 PR의 관찰 (학습 근거 후보)
   history: AutoRun[]
-  log: { t: string; text: string; by: '사람' | '자동' | '교차검증' }[]
+  log: { t: string; text: string; by: '사람' | '자동' | '재무 AI' }[]
 }
 
 // ---- 사후 감사: AI가 스스로 승인·자동 처리한 건 (사람이 나중에 본다)
-export type AuditKind = '자동 확정' | '자동 머지' | '교차검증 승인' | '교차검증 거절' | '기준 학습' | '학습 거부' | '기준 정식' | '기준 해제'
+export type AuditKind = '자동 확정' | '자동 머지' | '교차검증 승인' | '교차검증 거절' | '관찰 통과' | '기준 제안' | '학습 거부' | '기준 정식' | '기준 해제'
 export interface AuditItem { t: string; ctx: string; kind: AuditKind; ref: string; what: string; rule?: string; basis: string; verifier: string; result: string }
 
 export interface State {
@@ -214,16 +226,16 @@ export interface PastRecord { pr: string; t: string; path: string; lines: number
 export const PAST_RECORDS: PastRecord[] = [
   { pr: 'PR #19', t: '10-14', path: 'shop-web/checkout/', lines: 52, files: 3, result: '거절', note: '결제 화면 문구가 약관 표기와 충돌해 리뷰에서 거절' },
   { pr: 'PR #21', t: '10-16', path: 'shop-api/order/', lines: 38, files: 2, result: '장애 연결', note: '주문 API 응답 지연 사건에 연결' },
-  { pr: 'PR #24', t: '10-20', path: 'shop-web/product/', lines: 12, files: 1, result: '정상', note: '문구 수정, 교차검증 승인 (AR-1 근거)' },
-  { pr: 'PR #25', t: '10-20', path: 'shop-web/event/', lines: 8, files: 1, result: '정상', note: 'AR-1 시험 1건째' },
-  { pr: 'PR #26', t: '10-21', path: 'shop-web/notice/', lines: 20, files: 2, result: '정상', note: 'AR-1 시험 2건째' },
+  { pr: 'PR #24', t: '10-20', path: 'shop-web/product/', lines: 12, files: 1, result: '정상', note: '교차검증 뒤 머지, 관찰 기간 장애·revert 없음 (AR-1 근거)' },
+  { pr: 'PR #25', t: '10-20', path: 'shop-web/event/', lines: 8, files: 1, result: '정상', note: '교차검증 뒤 머지, 관찰 기간 장애·revert 없음 (AR-1 근거)' },
+  { pr: 'PR #26', t: '10-21', path: 'shop-web/notice/', lines: 20, files: 2, result: '정상', note: 'AR-1로 자동 머지' },
   { pr: 'PR #28', t: '10-21', path: 'shop-api/payment/', lines: 14, files: 1, result: '장애 연결', note: 'ctx_inc_0001 결제 API 응답 지연' },
 ]
 const ALLOWED_PATHS = ['shop-web/', 'shop-api/', 'docs/'] // 안전 레이어 allowed_paths (목)
 
 const num = (id: string) => Number(id.replace(/\D/g, '')) || 0
 const nextNum = (ids: string[]) => Math.max(0, ...ids.map(num)) + 1
-export const activeRules = (p: AutoPolicy) => p.rules.filter((r) => r.status !== '해제됨')
+export const activeRules = (p: AutoPolicy) => p.rules.filter((r) => r.status === '정식')
 export const ruleText = (r: { path: string; lines: number; files: number; noWarn?: boolean }) => `${r.path} ${r.lines}줄·${r.files}파일 이하${r.noWarn === false ? '' : ' · 경고 없음'}`
 type Size = { path: string; lines: number; files: number }
 const covers = (r: Size, x: Size) => x.path.startsWith(r.path) && x.lines <= r.lines && x.files <= r.files
@@ -349,8 +361,7 @@ export const initialState: State = {
     { t: '10-21 14:10', ctx: 'ctx_inc_0001', from: 'infra', to: 'hr', point: 'record_case', kind: 'A2A', grade: 'A', text: 'kind rollback_executed (인프라 → 인사)' },
     { t: '10-22 09:04', ctx: 'ctx_req_0008', from: 'support', to: 'planning', point: 'create_ticket', kind: 'A2A', grade: 'A', text: '변경 요청 REQ-8 등록: 도서 상세의 출간일 표기 오타 수정' },
     { t: '10-22 09:05', ctx: 'ctx_req_0008', from: 'planning', to: 'planning', point: 'confirm_spec', kind: 'A2A', grade: 'A', text: 'SPEC-4 자동 확정 · 질문 없음·경고 없음·근거 2개 → 작업 T-8' },
-    { t: '10-22 09:06', ctx: 'ctx_req_0008', from: 'planning', to: 'safety', point: 'execute(merge_pr)', kind: 'execute', grade: 'B', text: 'PR #27 기준 AR-1(shop-web/ 30줄·2파일 이하 · 경고 없음) 안 · 검수·CI 통과 → 자동 머지 · 시험 중 기준이라 단계적 배포 (3/3)' },
-    { t: '10-22 09:06', ctx: 'auto_policy', from: 'planning', to: 'safety', point: 'auto_policy.updated', kind: '이벤트', text: '기준 AR-1 시험 3건 정상 → 정식 (기준표 pr_changed_lines·files·allowed_paths 갱신)' },
+    { t: '10-22 09:06', ctx: 'ctx_req_0008', from: 'planning', to: 'safety', point: 'execute(merge_pr)', kind: 'execute', grade: 'B', text: 'PR #27 기준 AR-1(shop-web/ 30줄·2파일 이하 · 경고 없음) 안 · 검수·CI 통과 → 자동 머지' },
     { t: '10-22 09:12', ctx: 'ctx_req_0012', from: 'support', to: 'planning', point: 'create_ticket', kind: 'A2A', grade: 'A', text: '반복 문의 42건으로 변경 요청 REQ-12 등록' },
     { t: '10-22 09:13', ctx: 'ctx_req_0012', from: 'planning', to: 'hr', point: 'check_plan', kind: 'A2A', grade: 'read', text: '② "재시도 버튼만 추가" 기각 이력 질의 → warn (DC-31)' },
     { t: '10-22 09:14', ctx: 'ctx_req_0012', from: 'planning', to: 'planning', point: 'write_spec', kind: 'A2A', grade: 'A', text: 'SPEC-7 초안 작성, 경고를 R2에 첨부, 질문 1개 → 답을 받은 뒤 확정 조건 확인' },
@@ -364,8 +375,7 @@ export const initialState: State = {
   reviews: [], // 맨 아래에서 PR #29 교차검증 1건을 코드 규칙으로 만들어 넣는다
   audit: [
     { t: '10-22 09:05', ctx: 'ctx_req_0008', kind: '자동 확정', ref: 'SPEC-4', what: '도서 상세의 출간일 표기 오타 수정', basis: '질문 없음·경고 없음·근거 2개', verifier: '조건 검사 (안전 레이어 execute() 기록)', result: '확정 → 작업 T-8' },
-    { t: '10-22 09:06', ctx: 'ctx_req_0008', kind: '자동 머지', ref: 'PR #27', what: 'R1: 도서 상세의 출간일 표기 오타 수정', rule: 'AR-1', basis: 'shop-web/ 30줄·2파일 이하 · 경고 없음', verifier: '안전 레이어 코드 규칙 (변경 줄·파일·허용 경로)', result: '머지 · 단계적 배포 3/3 정상' },
-    { t: '10-22 09:06', ctx: 'auto_policy', kind: '기준 정식', ref: 'AR-1', what: '시험 3건 정상 → 정식 기준', rule: 'AR-1', basis: 'PR #25, PR #26, PR #27 정상', verifier: '자동 (시험 결과)', result: '정식' },
+    { t: '10-22 09:06', ctx: 'ctx_req_0008', kind: '자동 머지', ref: 'PR #27', what: 'R1: 도서 상세의 출간일 표기 오타 수정', rule: 'AR-1', basis: 'shop-web/ 30줄·2파일 이하 · 경고 없음', verifier: '안전 레이어 코드 규칙 (변경 줄·파일·허용 경로)', result: '머지 · dev 배포' },
     { t: '10-22 10:20', ctx: 'ctx_inc_0001', kind: '자동 확정', ref: 'SPEC-6', what: '결제 경로 설정 변경 카나리 배포', basis: '질문 없음·경고 없음·근거 2개', verifier: '조건 검사 (안전 레이어 execute() 기록)', result: '확정 → 작업 T-10' },
   ],
   draftsIn: 2,
@@ -375,29 +385,38 @@ export const initialState: State = {
   autoPolicy: {
     rules: [
       {
-        id: 'AR-1', action: 'merge_pr', path: 'shop-web/', lines: 30, files: 2, noWarn: true, status: '정식',
-        basis: 'PR #24', backtest: { checked: 5, covered: 3, conflicts: [] },
-        runs: [{ pr: 'PR #25', result: '정상' }, { pr: 'PR #26', result: '정상' }, { pr: 'PR #27', result: '정상' }],
-        t: '10-20 16:10',
+        id: 'AR-1', action: 'merge_pr', path: 'shop-web/', lines: 30, files: 2, noWarn: true, status: '정식', approver: '재무 AI',
+        basis: ['PR #24', 'PR #25'], backtest: { checked: 5, covered: 3, conflicts: [] },
+        runs: [{ pr: 'PR #26', result: '정상' }, { pr: 'PR #27', result: '정상' }],
+        t: '10-20 16:10', decidedAt: '10-20 16:11', decideWhy: '안전 장치(100줄·5파일) 안 · 백테스트 충돌 0건',
       },
     ],
-    history: [{ pr: 'PR #27', req: 'REQ-8', t: '10-22 09:06', lines: 4, files: 1, result: '정상', rule: 'AR-1' }],
+    observing: [],
+    history: [
+      { pr: 'PR #26', req: 'REQ-6', t: '10-21 11:20', lines: 20, files: 2, result: '정상', rule: 'AR-1' },
+      { pr: 'PR #27', req: 'REQ-8', t: '10-22 09:06', lines: 4, files: 1, result: '정상', rule: 'AR-1' },
+    ],
     log: [
-      { t: '10-20 16:10', text: 'PR #24 교차검증 승인에서 기준 AR-1(shop-web/ 30줄·2파일 이하 · 경고 없음) 학습, 백테스트 충돌 0건 → 시험 중', by: '교차검증' },
-      { t: '10-22 09:06', text: 'AR-1 시험 3건 정상 → 정식', by: '자동' },
+      { t: '10-20 16:10', text: 'PR #24·PR #25 관찰 기간 장애·revert 없음 → 기준 AR-1(shop-web/ 30줄·2파일 이하 · 경고 없음) 제안, 백테스트 충돌 0건', by: '자동' },
+      { t: '10-20 16:11', text: 'AR-1 안전 장치 안 → 재무 AI review_threshold_change 승인 → 정식', by: '재무 AI' },
     ],
   },
 }
 
 // ---- 상태 변화 (버튼 → 에이전트 skill → 다른 부서로 나가는 연결 지점)
 
-let clock = 0
-function now(): string {
-  clock += 1
-  const m = 41 + clock
-  return `10-22 ${String(10 + Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
+// 실제 시각, KST 고정 (MM-DD HH:MM). 브라우저·버스가 어느 시간대에서 돌아도 같다.
+// 시드 기록은 10-22 과거 기록이고, 새로 들어온 요청부터 지금 시각이 찍힌다
+const pad = (n: number) => String(n).padStart(2, '0')
+const KST_MS = 9 * 60 * 60 * 1000
+function stamp(d: Date): string {
+  const k = new Date(d.getTime() + KST_MS)
+  return `${pad(k.getUTCMonth() + 1)}-${pad(k.getUTCDate())} ${pad(k.getUTCHours())}:${pad(k.getUTCMinutes())}`
 }
-export const TODAY = '10-22'
+function now(): string {
+  return stamp(new Date())
+}
+export const TODAY = stamp(new Date()).slice(0, 5)
 
 export type InboundKind =
   | 'support_ticket' | 'marketing_ticket' | 'hr_draft' | 'data_draft'
@@ -408,7 +427,8 @@ export type Action =
   | { type: 'inbound'; kind: InboundKind }
   | { type: 'send'; to: Dept; point: string; text: string }
   | { type: 'markRead'; to: Dept }
-  | { type: 'answerQuestion'; spec: string; text: string }
+  | { type: 'answerQuestion'; spec: string; text: string; agent?: boolean }
+  | { type: 'advance' } // 다음 단계 한 칸 (버스·화면이 일정 간격으로 보낸다)
   | { type: 'generatePrs'; spec: string }
   | { type: 'reviewPr'; pr: string }
   | { type: 'acceptDraft'; request: string }
@@ -417,6 +437,7 @@ export type Action =
   | { type: 'decideReview'; review: string } // 시연: 검증자(다른 부서)가 판단
   | { type: 'humanDecide'; review: string; ok: boolean } // 되돌릴 수 없는 일만
   | { type: 'disableRule'; rule: string } // 기준 끄기 (승인 없이 바로)
+  | { type: 'decideRule'; rule: string; ok: boolean } // 기준 넓히기 판단 (재무 AI 또는 사람, 시뮬레이터가 보낸다)
   // 소통
   | { type: 'postMessage'; thread: string; text: string }
   | { type: 'deptChat'; from: Dept }
@@ -576,6 +597,10 @@ export function prReviewOf(s: State, prId: string, id: string, t: string): Cross
   if (irr) {
     return { ...base, lane: 'human', irreversible: irr.label, routeWhy: [`되돌릴 수 없는 일: ${irr.label}`], checks: [...checks.filter((c) => c !== NO_IRREVERSIBLE), { label: '되돌릴 수 없는 일', result: '걸림', detail: `${irr.label} → AI가 판단하지 않고 사람이 확인` }], verifier: '사람 (기획개발팀 팀장)' }
   }
+  const prot = protectedOf(pr.gate.paths)
+  if (prot) {
+    return { ...base, lane: 'human', irreversible: `보호 경로 ${prot}`, routeWhy: [`safety 보호 경로(#203): ${prot}`], checks: [...checks, { label: '보호 경로', result: '걸림', detail: `${prot} → 학습과 상관없이 항상 사람이 확인` }], verifier: '사람 (기획개발팀 팀장)' }
+  }
   return { ...base, lane: 'ai', routeWhy: route, checks, verifier: verifierFor('merge_pr', pr.gate.paths), ...recommendOf(checks) }
 }
 
@@ -660,33 +685,29 @@ function mergeCore(s: State, prId: string, by: 'rule' | 'review' | 'human', rule
   const allDone = tasks.filter((x) => x.spec === specId).every((x) => x.state === '완료')
   const pol = s.autoPolicy
   const rule = ruleId ? pol.rules.find((r) => r.id === ruleId) : undefined
-  const k = rule ? rule.runs.length + 1 : 0
-  const trial = rule?.status === '시험 중'
-  const promote = trial && rule!.runs.filter((x) => x.result === '정상').length + 1 >= TRIAL_RUNS
-  const how = by === 'rule' ? `기준 ${rule?.id}(${rule ? ruleText(rule) : ''}) 안 · 검수·CI 통과 → 자동 머지${trial ? ` · 시험 중 기준이라 단계적 배포 (${k}/${TRIAL_RUNS}), 이상 시 자동 롤백` : ''}` : by === 'review' ? `교차검증 승인(${reviewId}) 뒤 자동 머지` : '사람 확인 뒤 머지'
+  const how = by === 'rule' ? `기준 ${rule?.id}(${rule ? ruleText(rule) : ''}) 안 · 검수·CI 통과 → 자동 머지` : by === 'review' ? `교차검증 승인(${reviewId}) 뒤 자동 머지 · ${OBSERVE_MIN}분 관찰 시작` : '사람 확인 뒤 머지'
   const act: Activity[] = [
     { t, ctx, from: 'planning', to: 'safety', point: 'execute(merge_pr)', kind: 'execute', grade: 'B', text: `${pr.id} ${how}` },
-    { t, ctx, from: 'planning', to: 'shop', point: 'github_merge_pull', kind: 'API', text: `${pr.id} 머지 → dev 배포${trial ? ' (단계적)' : ''}` },
+    { t, ctx, from: 'planning', to: 'shop', point: 'github_merge_pull', kind: 'API', text: `${pr.id} 머지 → dev 배포` },
     { t, ctx, from: 'planning', to: 'hr', point: 'record_case', kind: 'A2A', grade: 'A', text: `① kind pr_merged · ${pr.id}` },
   ]
   if (allDone && info.req) {
     act.push({ t, ctx, from: 'planning', to: 'hr', point: 'record_case', kind: 'A2A', grade: 'A', text: `① kind request_closed · ${info.req.id}` })
     act.push({ t, ctx, from: 'planning', to: info.req.from, point: 'get_request_status', kind: 'A2A', grade: 'read', text: `${info.req.id} "${info.req.title}" 완료 · ${pr.id} 머지 (${by === 'human' ? '사람 확인' : '사람 클릭 없이 자동 처리'})` })
   }
-  if (promote) act.push({ t, ctx: 'auto_policy', from: 'planning', to: 'safety', point: 'auto_policy.updated', kind: '이벤트', text: `기준 ${rule!.id} 시험 ${TRIAL_RUNS}건 정상 → 정식 (기준표 갱신)` })
   const audit: AuditItem[] = []
   if (by === 'rule' && rule) {
-    audit.push({ t, ctx, kind: '자동 머지', ref: pr.id, what: pr.title, rule: rule.id, basis: ruleText(rule), verifier: '안전 레이어 코드 규칙 (변경 줄·파일·허용 경로)', result: trial ? `머지 · 단계적 배포 ${k}/${TRIAL_RUNS}` : '머지 · dev 배포' })
-    if (promote) audit.push({ t, ctx: 'auto_policy', kind: '기준 정식', ref: rule.id, what: `시험 ${TRIAL_RUNS}건 정상 → 정식 기준`, rule: rule.id, basis: [...rule.runs.map((x) => x.pr), pr.id].join(', '), verifier: '자동 (시험 결과)', result: '정식' })
+    audit.push({ t, ctx, kind: '자동 머지', ref: pr.id, what: pr.title, rule: rule.id, basis: ruleText(rule), verifier: '안전 레이어 코드 규칙 (변경 줄·파일·허용 경로)', result: '머지 · dev 배포' })
   }
   const autoPolicy: AutoPolicy = by === 'rule' && rule
     ? {
         ...pol,
-        rules: pol.rules.map((r) => (r.id === rule.id ? { ...r, status: promote ? '정식' : r.status, runs: [...r.runs, { pr: pr.id, result: '정상' }] } : r)),
+        rules: pol.rules.map((r) => (r.id === rule.id ? { ...r, runs: [...r.runs, { pr: pr.id, result: '정상' }] } : r)),
         history: [...pol.history, { pr: pr.id, req: info.req?.id ?? '-', t, lines: pr.gate.lines, files: pr.gate.files, result: '정상', rule: rule.id }],
-        log: promote ? [...pol.log, { t, text: `${rule.id} 시험 ${TRIAL_RUNS}건 정상 → 정식`, by: '자동' }] : pol.log,
       }
-    : pol
+    : by === 'review'
+      ? { ...pol, observing: [...pol.observing, { pr: pr.id, req: info.req?.id ?? '-', path: pr.gate.paths, lines: pr.gate.lines, files: pr.gate.files, mergedAt: t, untilMs: Date.now() + OBSERVE_MIN * 60_000, result: '관찰 중' }] }
+      : pol
   return {
     ...s,
     autoPolicy,
@@ -711,7 +732,7 @@ function tryMerge(s: State, prId: string): State {
 }
 
 // PR 만들기 (generate_pr). SPEC-7은 시연용 규모, 나머지는 제목으로 어림한다. 검수 통과분은 바로 머지 판단으로
-function genPrs(s: State, specId: string): State {
+function genPrs(s: State, specId: string, merge = true): State {
   const todo = s.tasks.filter((t) => t.spec === specId && t.state === '진행 중')
   if (!todo.length) return s
   const ctx = ctxOfSpec(s, specId)
@@ -741,46 +762,69 @@ function genPrs(s: State, specId: string): State {
       }),
     ],
   }
-  for (const p of prs) if (p.reviews[0] === '통과') next = tryMerge(next, p.id)
+  if (merge) for (const p of prs) if (p.reviews[0] === '통과') next = tryMerge(next, p.id)
   return next
 }
 
-// 교차검증 승인 건에서 기준을 뽑고(액션 + 경로 접두사 + 규모 상한 + 경고 없음), 과거 기록으로 백테스트한다
-function learnFrom(s: State, reviewId: string): State {
-  const r = s.reviews.find((x) => x.id === reviewId)
-  const pr = s.prs.find((p) => p.id === r?.ref)
-  if (!r || !pr) return s
-  const info = prInfo(s, pr)
-  const cand = { path: pr.gate.paths, lines: pr.gate.lines, files: pr.gate.files, noWarn: true }
-  const proposal = `PR 머지 · ${ruleText(cand)}`
-  const records = pastRecords(s, pr.id)
+// 관찰 기간이 끝난 머지: 장애·revert 연결이 없으면 정상 (학습 근거가 된다)
+function observeStep(s: State): State {
+  const pol = s.autoPolicy
+  const due = pol.observing.find((o) => o.result === '관찰 중' && o.untilMs <= Date.now())
+  if (!due) return s
+  const t = now()
+  return {
+    ...s,
+    autoPolicy: { ...pol, observing: pol.observing.map((o) => (o === due ? { ...o, result: '정상' } : o)), log: [...pol.log, { t, text: `${due.pr} 머지 뒤 ${OBSERVE_MIN}분 관찰 · 장애·revert 연결 없음 → 학습 근거`, by: '자동' }] },
+    audit: [...s.audit, { t, ctx: 'auto_policy', kind: '관찰 통과', ref: due.pr, what: `${due.path} ${due.lines}줄·${due.files}파일`, basis: `머지 ${due.mergedAt} · 관찰 ${OBSERVE_MIN}분`, verifier: '자동 (장애·revert 연결 기록)', result: '정상' }],
+  }
+}
+
+// 같은 경로에서 관찰을 통과한 머지가 OBSERVE_N건 모이면 기준을 제안한다 (백테스트 → 안전 장치 안이면 재무 AI, 밖이면 사람)
+function proposeStep(s: State): State {
+  const pol = s.autoPolicy
+  const used = new Set(pol.rules.flatMap((r) => r.basis))
+  const clean = pol.observing.filter((o) => o.result === '정상' && !used.has(o.pr) && !protectedOf(o.path))
+  const byPath = new Map<string, Observation[]>()
+  for (const o of clean) byPath.set(o.path, [...(byPath.get(o.path) ?? []), o])
+  const size = (g: Observation[]) => ({ path: g[0].path, lines: Math.max(...g.map((x) => x.lines)), files: Math.max(...g.map((x) => x.files)) })
+  const group = [...byPath.values()].find((g) => g.length >= OBSERVE_N && !matchRule(pol, size(g), false))
+  if (!group) return s
+  const cand = { ...size(group), noWarn: true }
+  const records = pastRecords(s)
   const covered = records.filter((x) => covers(cand, x))
   const conflicts = covered.filter((x) => x.result !== '정상')
   const backtest: Backtest = { checked: records.length, covered: covered.length, conflicts: conflicts.map((x) => `${x.pr} ${x.result}`) }
-  const miss = pr.reviews.filter((x) => x === '불일치').length
-  const refused = info.para?.warn ? '경고가 붙은 문단의 건이라 기준으로 만들지 않음 (기준 조건이 "경고 없음")'
-    : info.para?.incident ? '장애가 표시된 문단의 건이라 기준으로 만들지 않음'
-      : miss >= 2 ? `검수 불일치 ${miss}회 건이라 기준으로 만들지 않음`
-        : conflicts.length ? `백테스트 충돌: ${conflicts.map((x) => `${x.pr}(${x.result}${x.note ? `, ${x.note}` : ''})`).join(', ')}도 이 기준이면 자동 머지됐을 것`
-          : undefined
+  const inGuard = cand.lines <= GUARD.lines && cand.files <= GUARD.files
+  const approver: AutoRule['approver'] = inGuard ? '재무 AI' : '사람 (태윤)'
+  const id = `AR-${nextNum(pol.rules.map((x) => x.id))}`
   const t = now()
-  if (refused) {
-    return {
-      ...s,
-      reviews: s.reviews.map((x) => (x.id === r.id ? { ...x, learned: { refused, proposal, backtest } } : x)),
-      autoPolicy: { ...s.autoPolicy, log: [...s.autoPolicy.log, { t, text: `${r.id}(${pr.id})에서 기준 제안 ${ruleText(cand)} → 학습 거부: ${refused}`, by: '교차검증' }] },
-      audit: [...s.audit, { t, ctx: r.ctx, kind: '학습 거부', ref: r.id, what: `기준 제안 ${proposal}`, basis: `과거 기록 ${backtest.checked}건 대조, 이 기준에 드는 건 ${backtest.covered}건`, verifier: '백테스트 (코드 규칙)', result: refused }],
-      activity: [...s.activity, { t, ctx: r.ctx, from: 'planning', to: 'planning', point: 'auto_policy.learn', kind: 'A2A', grade: 'A', text: `${r.id} 승인 건에서 기준 제안 (${ruleText(cand)}) → 학습 거부 · ${refused}` }],
-    }
-  }
-  const id = `AR-${nextNum(s.autoPolicy.rules.map((x) => x.id))}`
-  const rule: AutoRule = { id, action: 'merge_pr', ...cand, status: '시험 중', review: r.id, basis: pr.id, backtest, runs: [], t }
+  const basis = group.map((x) => x.pr)
+  const refused = conflicts.length ? `백테스트 충돌: ${conflicts.map((x) => `${x.pr}(${x.result})`).join(', ')}도 이 기준이면 자동 머지됐을 것` : undefined
+  const rule: AutoRule = { id, action: 'merge_pr', ...cand, status: refused ? '거절' : '승인 대기', approver, basis, backtest, runs: [], t, ...(refused ? { decidedAt: t, decideWhy: refused } : {}) }
+  const head = `${basis.join('·')} 관찰 통과 → 기준 ${id}(${ruleText(cand)}) 제안 · 과거 ${backtest.checked}건 대조`
+  const ask: Activity = inGuard
+    ? { t, ctx: 'auto_policy', from: 'planning', to: 'finance', point: 'review_threshold_change', kind: 'A2A', grade: 'B', text: `기준 ${id}(${ruleText(cand)}) 넓히기 요청 · 근거 ${basis.join(', ')} 관찰 통과 · 안전 장치(${GUARD.lines}줄·${GUARD.files}파일) 안` }
+    : { t, ctx: 'auto_policy', from: 'planning', to: 'safety', point: 'threshold_change.request', kind: 'A2A', grade: 'C', text: `기준 ${id}(${ruleText(cand)}) 넓히기 요청 · 안전 장치 밖이라 사람(태윤) 승인` }
   return {
     ...s,
-    reviews: s.reviews.map((x) => (x.id === r.id ? { ...x, learned: { rule: id, proposal, backtest } } : x)),
-    autoPolicy: { ...s.autoPolicy, rules: [...s.autoPolicy.rules, rule], log: [...s.autoPolicy.log, { t, text: `${r.id}(${pr.id}) 승인에서 기준 ${id}(${ruleText(rule)}) 학습, 백테스트 ${backtest.checked}건 대조·충돌 0건 → 시험 중`, by: '교차검증' }] },
-    audit: [...s.audit, { t, ctx: r.ctx, kind: '기준 학습', ref: id, what: `${proposal} (시험 중)`, rule: id, basis: `${r.id} 승인 건 ${pr.id} · 과거 기록 ${backtest.checked}건 대조, 충돌 0건`, verifier: '백테스트 (코드 규칙)', result: `시험 중 · 처음 ${TRIAL_RUNS}건 단계적 배포·자동 롤백` }],
-    activity: [...s.activity, { t, ctx: r.ctx, from: 'planning', to: 'safety', point: 'auto_policy.learned', kind: '이벤트', text: `기준 ${id} 등록 (${ruleText(rule)}) · 백테스트 충돌 0건 · 시험 중: 처음 ${TRIAL_RUNS}건 단계적 배포·자동 롤백` }],
+    autoPolicy: { ...pol, rules: [...pol.rules, rule], log: [...pol.log, { t, text: refused ? `${head} → 학습 거부 · ${refused}` : `${head}, 충돌 0건 → ${approver} 승인 요청`, by: '자동' }] },
+    audit: [...s.audit, { t, ctx: 'auto_policy', kind: refused ? '학습 거부' : '기준 제안', ref: id, what: `PR 머지 · ${ruleText(cand)}`, rule: id, basis: `${basis.join(', ')} 관찰 통과 · 백테스트 ${backtest.checked}건`, verifier: '백테스트 (코드 규칙)', result: refused ?? `${approver} 승인 대기` }],
+    activity: refused ? s.activity : [...s.activity, ask],
+  }
+}
+
+// 기준 넓히기 판단: 재무 AI(안전 장치 안) 또는 사람(태윤, 밖). 다른 부서 시뮬레이터가 보낸다
+function decideRule(s: State, ruleId: string, ok: boolean): State {
+  const r = s.autoPolicy.rules.find((x) => x.id === ruleId)
+  if (!r || r.status !== '승인 대기') return s
+  const t = now()
+  const ai = r.approver === '재무 AI'
+  const why = ok ? (ai ? `안전 장치(${GUARD.lines}줄·${GUARD.files}파일) 안 · 백테스트 충돌 0건` : '사람(태윤) 확인') : '넓히지 않음'
+  return {
+    ...s,
+    autoPolicy: { ...s.autoPolicy, rules: s.autoPolicy.rules.map((x) => (x.id === ruleId ? { ...x, status: ok ? '정식' : '거절', decidedAt: t, decideWhy: why } : x)), log: [...s.autoPolicy.log, { t, text: `${ruleId} ${r.approver} ${ok ? '승인 → 정식' : '거절'} (${why})`, by: ai ? '재무 AI' : '사람' }] },
+    audit: [...s.audit, { t, ctx: 'auto_policy', kind: ok ? '기준 정식' : '학습 거부', ref: ruleId, what: `PR 머지 · ${ruleText(r)}`, rule: ruleId, basis: r.basis.join(', '), verifier: ai ? '재무 review_threshold_change' : '사람 (태윤)', result: ok ? '정식' : '거절' }],
+    activity: [...s.activity, { t, ctx: 'auto_policy', from: ai ? 'finance' : 'human', to: 'planning', point: ai ? 'review_threshold_change' : '사람 확인', kind: ai ? 'A2A' : '사람', text: `기준 ${ruleId} ${ok ? '승인' : '거절'} (${why})` }],
   }
 }
 
@@ -803,8 +847,7 @@ function decideReview(s: State, reviewId: string): State {
     return next
   }
   if (r.target === 'confirm_spec') return confirmSpecCore(next, r.ref, 'review', `${r.id} 승인 (${r.verifier})`)
-  next = mergeCore(next, r.ref, 'review', undefined, r.id)
-  return learnFrom(next, r.id)
+  return mergeCore(next, r.ref, 'review', undefined, r.id)
 }
 
 // 되돌릴 수 없는 일: 사람이 확인하고 진행하거나 보류한다
@@ -863,6 +906,7 @@ function draftSpecFor(s: State, r: Request, adopted: boolean): State {
       ...s.activity,
       ...(adopted ? [{ t, ctx: r.ctx, from: 'planning' as const, to: 'planning' as const, point: 'review_ticket_draft', kind: 'A2A' as const, grade: 'A' as const, text: `${r.id} 채택` }] : []),
       { t, ctx: r.ctx, from: 'planning', to: 'planning', point: 'write_spec', kind: 'A2A', grade: 'A', text: `${specId} 초안 작성, 질문 1개 → 답을 받으면 확정 조건 확인` },
+      { t, ctx: r.ctx, from: 'planning', to: r.from, point: 'spec_question', kind: 'A2A', grade: 'read', text: `${specId} 빈 항목 질문: ${spec.question}` },
     ],
   }
 }
@@ -887,15 +931,6 @@ function writeDirectSpec(s: State, req: Request, paras: Para[], goal: string, ba
   }
 }
 
-// 간단 요청 한 번에 처리: write_spec → 자동 확정 → split_tasks → generate_pr(B) → review_pr → 기준 안이면 merge_pr(B), 밖이면 교차검증
-function autoComplete(s: State, req: Request): State {
-  const w = writeDirectSpec(s, req, [
-    { id: 'R1', kind: 'req', text: req.title },
-    { id: 'C1', kind: 'done', text: '바뀐 화면에서 요청한 표시가 그대로 보인다' },
-  ], '화면 표시를 요청대로 고친다 (동작 변경 없음)', [`${req.id} (${DEPT_NAME[req.from]})`, '간단 요청 규칙 통과'])
-  return genPrs(trySpecAuto(w.s, w.specId), w.specId)
-}
-
 function inbound(s: State, kind: InboundKind): State {
   const seq = s.seq + 1
   const t = now()
@@ -915,7 +950,7 @@ function inbound(s: State, kind: InboundKind): State {
     const dupId = same ? (same.duplicateOf ?? same.id) : undefined
     const id = `REQ-${20 + seq}`
     const auto = dupId ? undefined : checkSimple(title, s.autoPolicy)
-    const req: Request = { id, ctx: ctxReq, from, via: 'create_ticket', title, evidence: `${DEPT_NAME[from]} 시뮬레이터에서 보냄`, state: dupId ? '중복 연결' : '접수', duplicateOf: dupId, auto }
+    const req: Request = { id, ctx: ctxReq, from, via: 'create_ticket', title, evidence: `${DEPT_NAME[from]} 시뮬레이터에서 보냄`, state: dupId ? '중복 연결' : '접수', duplicateOf: dupId, auto, flow: !dupId }
     const created = act({ ctx: ctxReq, from, to: 'planning', point: 'create_ticket', kind: 'A2A', grade: 'A', text: dupId ? `"${title}" → 같은 요청 ${dupId}에 연결 (linked_duplicate)` : `변경 요청 ${id} 등록: ${title}` })
     const received: State = { ...base, requests: [...s.requests, req], activity: [...s.activity, created] }
     if (!auto) {
@@ -925,8 +960,8 @@ function inbound(s: State, kind: InboundKind): State {
       ...received,
       activity: [...received.activity, { t, ctx: ctxReq, from: 'planning', to: 'planning', point: 'classify_request', kind: 'A2A', grade: 'read', text: auto.ok ? '간단 요청 판정 → 사람 클릭 없이 끝까지 처리 (기준 밖이면 머지 전 AI 교차검증)' : `일반 요청 · ${auto.reasons.filter((r) => r.includes('평소대로')).join(', ')}` }],
     }
-    if (auto.ok) return autoComplete(judged, req)
-    return { ...judged, activity: [...judged.activity, { t, ctx: ctxReq, from: 'planning', to: from, point: 'get_request_status', kind: 'A2A', grade: 'read', text: `${id} 접수됨 (기획서 작성 대기)` }] }
+    if (auto.ok) return judged
+    return { ...judged, activity: [...judged.activity, { t, ctx: ctxReq, from: 'planning', to: from, point: 'get_request_status', kind: 'A2A', grade: 'read', text: `${id} 접수됨 → 기획서 작성` }] }
   }
   if (kind === 'finance_irreversible') {
     const id = `REQ-${20 + seq}`
@@ -945,7 +980,7 @@ function inbound(s: State, kind: InboundKind): State {
     return {
       ...base,
       draftsIn: s.draftsIn + 1,
-      requests: [...s.requests, { id, ctx: ctxReq, from, via: from === 'hr' ? 'ticket_draft_propose (③)' : '개선 초안 (원인 추적 루프 ③)', title, evidence: `${DEPT_NAME[from]} 시뮬레이터에서 보냄`, state: '접수' }],
+      requests: [...s.requests, { id, ctx: ctxReq, from, via: from === 'hr' ? 'ticket_draft_propose (③)' : '개선 초안 (원인 추적 루프 ③)', title, evidence: `${DEPT_NAME[from]} 시뮬레이터에서 보냄`, state: '접수', flow: true }],
       activity: [...s.activity, act({ ctx: ctxReq, from, to: 'planning', point: from === 'hr' ? 'ticket_draft_propose' : '개선 초안 (루프 ③)', kind: 'A2A', grade: 'A', text: `개선 초안 수신 → 요청함 ${id}` })],
     }
   }
@@ -970,16 +1005,17 @@ function inbound(s: State, kind: InboundKind): State {
     const followId = `REQ-${100 + n}`
     // 자동 머지한 PR이 장애에 연결되면 그 PR을 통과시킨 기준(또는 그 PR에서 배운 기준)을 바로 해제한다 (끄는 쪽은 승인 없이)
     const pol = s.autoPolicy
-    const hit = pr.auto ? pol.rules.filter((r) => r.status !== '해제됨' && (r.id === pr.rule || r.basis === pr.id)) : []
+    const hit = pr.auto ? pol.rules.filter((r) => (r.status === '정식' || r.status === '승인 대기') && (r.id === pr.rule || r.basis.includes(pr.id))) : []
     const autoPolicy: AutoPolicy = pr.auto
       ? {
           ...pol,
           rules: pol.rules.map((r) => (hit.includes(r) ? { ...r, status: '해제됨', offAt: t, offWhy: `${pr.id}가 사건 ${ctx}에 연결`, runs: r.runs.map((x) => (x.pr === pr.id ? { ...x, result: '장애 연결' } : x)) } : r)),
           history: pol.history.map((h) => (h.pr === pr.id ? { ...h, result: '장애 연결' } : h)),
+          observing: pol.observing.map((o) => (o.pr === pr.id ? { ...o, result: '장애 연결' } : o)),
           log: [...pol.log, ...hit.map((r) => ({ t, text: `${pr.id}(자동 머지)가 사건 ${ctx}에 연결 → 기준 ${r.id} 즉시 해제`, by: '자동' as const }))],
         }
       : pol
-    const offAct: Activity[] = hit.map((r) => act({ ctx, from: 'planning', to: 'safety', point: 'auto_policy.updated', kind: '이벤트', text: `자동 머지 ${pr.id}가 장애에 연결 → 기준 ${r.id}(${ruleText(r)}) 즉시 해제 (끄는 쪽은 승인 없이)${r.status === '시험 중' ? ' · 시험 중 단계적 배포라 자동 롤백' : ''}` }))
+    const offAct: Activity[] = hit.map((r) => act({ ctx, from: 'planning', to: 'safety', point: 'auto_policy.updated', kind: '이벤트', text: `자동 머지 ${pr.id}가 장애에 연결 → 기준 ${r.id}(${ruleText(r)}) 즉시 해제 (끄는 쪽은 승인 없이)` }))
     const offAudit: AuditItem[] = hit.map((r) => ({ t, ctx, kind: '기준 해제', ref: r.id, what: ruleText(r), rule: r.id, basis: `${pr.id} 장애 연결 (${ctx})`, verifier: '자동 (장애 연결)', result: '해제됨' }))
     return {
       ...base,
@@ -1151,6 +1187,8 @@ function inner(s: State, a: Action): State {
   switch (a.type) {
     case 'inbound':
       return inbound(s, a.kind)
+    case 'advance':
+      return step(s)
     case 'send':
       return { ...s, seq: s.seq + 1, activity: [...s.activity, { t: now(), ctx: 'ctx_req_0012', from: 'planning', to: a.to, point: a.point, kind: 'A2A', text: a.text }] }
     case 'markRead':
@@ -1160,7 +1198,7 @@ function inner(s: State, a: Action): State {
       if (!spec || !spec.question) return s
       const req = s.requests.find((r) => r.id === spec.request)
       const special = spec.id === 'SPEC-7'
-      const who = special ? '박지아 (고객지원)' : `${DEPT_NAME[req?.from ?? 'support']} 담당`
+      const who = special ? '박지아 (고객지원)' : `${DEPT_NAME[req?.from ?? 'support']} ${a.agent ? '에이전트' : '담당'}`
       const ctx = req?.ctx ?? 'ctx_req_0012'
       const id = `D-${s.decisions.length}`
       const th = s.threads.map((t) =>
@@ -1214,6 +1252,8 @@ function inner(s: State, a: Action): State {
       return humanDecide(s, a.review, a.ok)
     case 'disableRule':
       return disableRule(s, a.rule)
+    case 'decideRule':
+      return decideRule(s, a.rule, a.ok)
     default:
       return s
   }
@@ -1247,7 +1287,7 @@ export const PORTS: Port[] = [
   { point: 'cross_review.request', dir: 'out', peer: 'safety', kind: 'execute', grade: 'B', priority: 'required', what: '자동 조건·기준 밖인 기획서 확정·PR 머지를 다른 부서 검증자에게 (자기 승인 금지)' },
   { point: 'human_check.request', dir: 'out', peer: 'safety', kind: 'execute', grade: 'C', priority: 'required', what: '되돌릴 수 없는 일(결제 데이터 삭제·개인정보 노출·실제 송금)은 사람 확인 대기' },
   { point: 'github_create_pull', dir: 'out', peer: 'shop', kind: 'API', grade: '-', priority: 'recommended', what: 'gen/ 브랜치 PR, 라벨 generated-pr' },
-  { point: 'execute(merge_pr)', dir: 'out', peer: 'safety', kind: 'execute', grade: 'B', priority: 'recommended', what: '학습 기준 안이면 자동 머지, 교차검증 승인 뒤 자동 머지 (시험 중 기준은 단계적 배포)' },
+  { point: 'execute(merge_pr)', dir: 'out', peer: 'safety', kind: 'execute', grade: 'B', priority: 'recommended', what: '학습 기준 안이면 자동 머지, 교차검증 승인 뒤 자동 머지 (보호 경로·되돌릴 수 없는 일은 사람)' },
   { point: 'auto_policy.learned / updated', dir: 'out', peer: 'safety', kind: '이벤트', grade: '-', priority: 'optional', what: '학습 기준 등록·정식 전환·해제를 기준표에 반영' },
   { point: 'memory_search_card', dir: 'out', peer: 'memory', kind: 'API', grade: 'read', priority: 'recommended', what: '기획서 근거 검색 (과거 기획서·결정·문의)' },
 ]
@@ -1257,3 +1297,62 @@ export const PORTS: Port[] = [
   const seed = prReviewOf(initialState, 'PR #29', 'XR-1', '10-22 10:25')
   if (seed) initialState.reviews = [seed]
 }
+
+// 사람 클릭 없이 다음 단계로: 액션마다 더 진행할 게 없을 때까지 돌린다.
+// 멈추는 곳은 사람 확인(되돌릴 수 없는 일)·교차검증 거절·검수 불일치 2회뿐이다
+// 기획서 질문에 요청 부서 에이전트가 보내는 답 (다른 부서 시뮬레이터가 보낸다)
+export const DEPT_ANSWER: Partial<Record<Dept, string>> = {
+  support: '반복 문의가 난 동작까지 고쳐 주세요. 문구만 바꾸면 같은 문의가 계속 와요.',
+  marketing: '판매 화면 표시만 바꿔 주세요. 공지는 머지 뒤 저희가 올릴게요.',
+  hr: '운영 매뉴얼의 해당 절만 고쳐 주세요. 다른 절은 그대로 둡니다.',
+  data: '이상이 반복된 시간대의 원인 경로까지 고쳐 주세요. 지표는 머지 뒤 저희가 다시 봅니다.',
+  finance: '보관 기한이 지난 건만 대상입니다.',
+}
+function step(s: State): State {
+  const moved = (n: State) => n !== s
+  for (const r of s.requests) {
+    if (r.state !== '접수' || r.spec || r.duplicateOf) continue
+    const req = { ...r, flow: true }
+    const flowing = { ...s, requests: s.requests.map((x) => (x.id === r.id ? req : x)) }
+    if (r.auto?.ok) {
+      return writeDirectSpec(flowing, req, [
+        { id: 'R1', kind: 'req', text: r.title },
+        { id: 'C1', kind: 'done', text: '바뀐 화면에서 요청한 표시가 그대로 보인다' },
+      ], '화면 표시를 요청대로 고친다 (동작 변경 없음)', [`${r.id} (${DEPT_NAME[r.from]})`, '간단 요청 규칙 통과']).s
+    }
+    return draftSpecFor(flowing, req, !r.via.startsWith('create_ticket'))
+  }
+  for (const sp of s.specs) {
+    const r = s.requests.find((x) => x.id === sp.request)
+    if (!r?.flow) continue
+    if (sp.status !== '확정' && !s.reviews.some((x) => x.ref === sp.id)) {
+      const n = trySpecAuto(s, sp.id)
+      if (moved(n)) return n
+    }
+    if (sp.status === '확정' && s.tasks.some((x) => x.spec === sp.id && x.state === '진행 중' && !s.prs.some((p) => p.task === x.id))) return genPrs(s, sp.id, false)
+  }
+  for (const p of s.prs) {
+    if (p.merged || pendingReview(s, p.id)) continue
+    const last = p.reviews[p.reviews.length - 1]
+    if (last === '통과' && !s.reviews.some((x) => x.ref === p.id && x.result === '거절')) {
+      const n = tryMerge(s, p.id)
+      if (moved(n)) return n
+    }
+    if (last === '불일치' && p.reviews.filter((x) => x === '불일치').length < 2) return inner(s, { type: 'reviewPr', pr: p.id })
+  }
+  const o = observeStep(s)
+  if (moved(o)) return o
+  return proposeStep(s)
+}
+// 화면·버스가 다음 칸을 보낼지: 더 진행할 게 있으면 true
+export const canAdvance = (s: State) => step(s) !== s
+function advance(s: State): State {
+  let cur = s
+  for (let i = 0; i < 40; i++) {
+    const next = step(cur)
+    if (next === cur) return cur
+    cur = next
+  }
+  return cur
+}
+Object.assign(initialState, advance(initialState))
