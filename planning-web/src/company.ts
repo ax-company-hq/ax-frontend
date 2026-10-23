@@ -34,7 +34,9 @@ async function iconFromHtml(site: string): Promise<string | undefined> {
 }
 
 // 앞에서부터 먼저 불러지는 것을 쓴다 (경로 후보는 한꺼번에 확인)
-export async function findSiteIcon(site = COMPANY.shopUrl): Promise<string> {
+export async function findSiteIcon(shopUrl = COMPANY.shopUrl): Promise<string> {
+  // 게이트웨이(한 포트)에서는 판매 사이트 주소가 '/' 같은 상대 경로라 지금 주소 기준으로 바꾼다
+  const site = new URL(shopUrl, window.location.href).href
   const explicit = import.meta.env.VITE_COMPANY_LOGO
   if (explicit && (await loads(explicit))) return explicit
   const paths = COMMON_PATHS.map((p) => new URL(p, site).href)
