@@ -1,12 +1,15 @@
 // 정리 문서: 요청 하나에 흩어진 기획서·작업·PR·대화·결정·장애를 한 장으로 모으고, 사람이 고친다.
 // 수정은 칸에서 벗어날 때(blur) 저장한다. 연동 버스에 붙어 있으면 다른 화면에도 바로 보인다.
 import { useState, type Dispatch } from 'react'
-import { Button, Card, Chip, PageHeader, Select, useToast } from '@dejafix/common-frontend'
+import {Button, PageHeader, Select, useToast } from '@dejafix/common-frontend'
 import { type Action, type Doc, type DocBlock, type State } from './data'
+import { Linked, Ref, go } from './links'
+import { Sec, Tag } from './parts'
 
-export function Docs({ s, d }: { s: State; d: Dispatch<Action> }) {
+export function Docs({ s, d, item }: { s: State; d: Dispatch<Action>; item?: string }) {
   const toast = useToast()
-  const [sel, setSel] = useState(s.docs[s.docs.length - 1]?.id ?? '')
+  const sel = item ?? s.docs[s.docs.length - 1]?.id ?? ''
+  const setSel = (id: string) => go(`#/docs/${id}`)
   const [about, setAbout] = useState(s.requests[0]?.id ?? '')
   const doc = s.docs.find((x) => x.id === sel) ?? s.docs[s.docs.length - 1]
   const lastId = `DOC-${s.docs.length + 1}`
@@ -18,9 +21,9 @@ export function Docs({ s, d }: { s: State; d: Dispatch<Action> }) {
       <aside className="col-left">
         <div className="ph">문서 {s.docs.length}개</div>
         {s.docs.slice().reverse().map((x) => (
-          <button key={x.id} type="button" className={`doc-li${x.id === doc?.id ? ' on' : ''}`} onClick={() => setSel(x.id)}>
-            <span className="mono">{x.id}</span> {x.title} {x.by === 'ai' && <Chip tone="green">AI 정리</Chip>}
-          </button>
+          <a key={x.id} href={`#/docs/${x.id}`} className={`doc-li${x.id === doc?.id ? ' on' : ''}`}>
+            <span className="mono">{x.id}</span> {x.title} {x.by === 'ai' && <Tag tone="green">AI 정리</Tag>}
+          </a>
         ))}
         <Button size="small" onClick={() => { d({ type: 'newDoc', title: '' }); setSel(lastId) }}>+ 새 문서</Button>
         <div className="ph" style={{ marginTop: 18 }}>관련 내용 모아 정리</div>
@@ -29,7 +32,7 @@ export function Docs({ s, d }: { s: State; d: Dispatch<Action> }) {
         <p className="muted small" style={{ margin: 0 }}>요청에 연결된 기획서 문단·작업·PR·대화·결정·장애를 모으고 남은 일을 할 일로 뽑는다.</p>
       </aside>
 
-      <section className="col-doc">{doc ? <Editor key={doc.id} doc={doc} d={d} /> : <span className="muted">문서가 없습니다.</span>}</section>
+      <section className="col-doc">{doc ? <Editor key={doc.id} doc={doc} d={d} s={s} /> : <span className="muted">문서가 없습니다.</span>}</section>
 
       <aside className="col-right">
         {doc && <Related doc={doc} s={s} />}
@@ -39,7 +42,7 @@ export function Docs({ s, d }: { s: State; d: Dispatch<Action> }) {
   )
 }
 
-function Editor({ doc, d }: { doc: Doc; d: Dispatch<Action> }) {
+function Editor({ doc, d, s }: { doc: Doc; d: Dispatch<Action>; s: State }) {
   const todos = doc.blocks.filter((b) => b.kind === 'todo')
   return (
     <>
@@ -54,11 +57,11 @@ function Editor({ doc, d }: { doc: Doc; d: Dispatch<Action> }) {
       <p className="muted small" style={{ margin: 0 }}>
         <span className="mono">{doc.id}</span> · 마지막 수정 {doc.updated}
         {todos.length > 0 && <> · 할 일 {todos.filter((b) => b.done).length}/{todos.length}</>}
-        {doc.about && <> · 요청 <span className="mono">{doc.about}</span></>}
+        {doc.about && <> · 요청 <Ref s={s} id={doc.about} /> · <a href={`#/projects/${doc.about}`}>프로젝트 보기</a></>}
         {doc.by === 'ai' && <> · AI 어시스턴트가 정리</>}
       </p>
       <div className="doc-blocks">
-        {doc.blocks.map((b) => <Block key={`${b.id}-${b.text}-${b.done}`} b={b} doc={doc.id} d={d} />)}
+        {doc.blocks.map((b) => <Block key={`${b.id}-${b.text}-${b.done}`} b={b} doc={doc.id} d={d} s={s} />)}
       </div>
       <div className="actions">
         <Button size="small" onClick={() => d({ type: 'addBlock', doc: doc.id, kind: 'h2' })}>+ 소제목</Button>
@@ -69,7 +72,7 @@ function Editor({ doc, d }: { doc: Doc; d: Dispatch<Action> }) {
   )
 }
 
-function Block({ b, doc, d }: { b: DocBlock; doc: string; d: Dispatch<Action> }) {
+function Block({ b, doc, d, s }: { b: DocBlock; doc: string; d: Dispatch<Action>; s: State }) {
   const save = (text: string) => text !== b.text && d({ type: 'editBlock', doc, block: b.id, text })
   const remove = <button type="button" className="blk-x" aria-label="블록 삭제" onClick={() => d({ type: 'removeBlock', doc, block: b.id })}>×</button>
   if (b.kind === 'h2') {
@@ -85,7 +88,7 @@ function Block({ b, doc, d }: { b: DocBlock; doc: string; d: Dispatch<Action> })
     )
   }
   if (b.kind === 'ref') {
-    return <div className="blk blk-ref"><Chip>연결</Chip><span>{b.text}</span>{remove}</div>
+    return <div className="blk blk-ref"><Tag>연결</Tag><span><Linked s={s} text={b.text} /></span>{remove}</div>
   }
   return (
     <div className="blk">
@@ -101,11 +104,11 @@ function Related({ doc, s }: { doc: Doc; s: State }) {
   return (
     <>
       <div className="ph">이 문서에 연결된 것</div>
-      <Card title="요청">{r ? <div className="msg"><span className="mono">{r.id}</span> {r.title} <Chip>{r.state}</Chip></div> : <span className="muted">직접 쓴 문서 (요청 연결 없음)</span>}</Card>
-      <Card title="기획 문서">{spec ? <div className="msg"><a href="#/work/specs" className="mono">{spec.id}</a> {spec.title} <Chip>{spec.status}</Chip></div> : <span className="muted">없음</span>}</Card>
-      <Card title="내보내기" sub="노션·슬랙은 가져오기/내보내기만 한다">
+      <Sec title="요청">{r ? <div className="msg"><Ref s={s} id={r.id} /> {r.title} <Tag>{r.state}</Tag></div> : <span className="muted">직접 쓴 문서 (요청 연결 없음)</span>}</Sec>
+      <Sec title="기획 문서">{spec ? <div className="msg"><Ref s={s} id={spec.id} /> {spec.title} <Tag>{spec.status}</Tag></div> : <span className="muted">없음</span>}</Sec>
+      <Sec title="내보내기" sub="노션·슬랙은 가져오기/내보내기만 한다">
         <span className="muted small">notion_export_page · slack_post_message (실제 연결은 MCP 도구가 생긴 뒤)</span>
-      </Card>
+      </Sec>
     </>
   )
 }

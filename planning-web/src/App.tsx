@@ -1,4 +1,4 @@
-// 캣북스(catbooks) 업무 시스템 안의 기획개발팀 화면. 사이드바 = 프로젝트·요청·작업·정리·소통·지표, 각 메뉴의 하위 목록은 상단 가로탭.
+// 캣북스(catbooks) 업무 시스템 안의 기획개발팀 화면. 사이드바 = 프로젝트·요청·작업·정리·소통·규정·자료·지표, 각 메뉴의 하위 목록은 상단 가로탭.
 // 라우팅은 해시(#/<메뉴>/<가로탭>)로 한다.
 import { useEffect, useRef, useState } from 'react'
 import { AppShell, Button, Chip, Notice, ToastOutlet, UserMenu, useToast, type LinkRenderer, type NavItem } from '@dejafix/common-frontend'
@@ -11,6 +11,8 @@ import { Docs } from './docs'
 import { Talk } from './talk'
 import { COMPANY, findSiteIcon } from './company'
 import { Projects } from './projects'
+import { convoHref } from './links'
+import { Knowledge } from './knowledge'
 
 type IconName = NonNullable<NavItem['icon']>
 interface Section { label: string; icon: IconName; tabs: { id: string; label: string }[] }
@@ -30,6 +32,7 @@ const SECTIONS = {
   ] },
   docs: { label: '정리', icon: 'report', tabs: [] },
   talk: { label: '소통', icon: 'send', tabs: [] },
+  knowledge: { label: '규정·자료', icon: 'admin', tabs: [] },
   metrics: { label: '지표', icon: 'dashboard', tabs: [
     { id: 'overview', label: '지표' },
     { id: 'autonomy', label: '자동 처리 범위' },
@@ -82,10 +85,16 @@ export function App() {
   const chat = useAssistantChat(state, dispatch)
   const toast = useToast()
   const logo = useSiteIcon()
-  const [section, sub] = route.split('/')
+  const [section, sub, ...rest] = route.split('/')
   const planning = isSection(section)
   const tabs: { id: string; label: string }[] = planning ? SECTIONS[section].tabs : []
   const tab = tabs.find((t) => t.id === sub)?.id ?? tabs[0]?.id
+  // 가로탭이 있는 메뉴는 #/<메뉴>/<탭>/<항목>/<하위>, 없는 메뉴는 #/<메뉴>/<항목>/<하위>
+  const [item, item2] = (tabs.length ? rest : [sub, ...rest]).map((x) => (x ? decodeURIComponent(x) : undefined))
+  // 없는 화면 주소(예: 예전 '참여한 사건')는 들어온 요청으로 돌린다
+  useEffect(() => {
+    if (!planning && section !== 'depts') location.replace('#/requests/incoming')
+  }, [planning, section])
 
   // 다른 부서에서 들어온 것: 기획개발 화면(요청·작업)을 볼 때까지 "새로"로 센다
   const inbound = state.activity.filter((x) => x.seq && x.to === 'planning')
@@ -115,7 +124,6 @@ export function App() {
       badge: badge[id] || undefined,
     })),
     { href: '#/depts', label: '다른 부서 (시뮬레이터)', icon: 'compare', active: section === 'depts', badge: unreadOut || undefined },
-    { href: '#/related', label: '우리 부서가 참여한 사건', icon: 'admin', active: section === 'related' },
     { href: COMPANY.shopUrl, label: `${COMPANY.name} 바로가기` },
   ]
 
@@ -130,20 +138,15 @@ export function App() {
           <span style={{ flex: 1, minWidth: 0 }}>
             <b>기획개발팀</b> <span style={{ color: 'var(--text-3)' }}>{COMPANY.name} · {COMPANY.tagline}</span>
           </span>
-          <Chip tone="green">모든 서비스 정상</Chip>
+          <Chip tone={connected ? 'green' : 'amber'} title={connected ? '시연용 목 데이터(PLANNING_MOCK=1). 연동 버스(127.0.0.1:8790)에 연결되어 기획개발(3002)과 다른 부서(3003) 화면이 같은 데이터를 봅니다.' : '시연용 목 데이터(PLANNING_MOCK=1). 연동 버스에 연결되지 않아 이 화면 혼자 동작합니다.'}>
+            {connected ? '시연 데이터 · 연동 중' : '시연 데이터 · 단독'}
+          </Chip>
           <ToastOutlet />
           <UserMenu name="노예진" role="기획개발팀 팀장" items={[{ label: '로그아웃', onSelect: () => toast.show('시연 화면이라 로그아웃은 하지 않습니다') }]} />
           <Button variant="dark" icon="sparkle" onClick={() => setPanel((v) => !v)}>
             AI 어시스턴트
           </Button>
         </>
-      }
-      banner={
-        <div style={{ padding: '10px 28px 0' }}>
-          <Notice icon="bell">
-            시연용 목 데이터입니다 (PLANNING_MOCK=1). {connected ? '연동 버스(127.0.0.1:8790)에 연결됨 · 기획개발(3002)과 다른 부서(3003) 화면이 같은 데이터를 봅니다.' : '연동 버스에 연결되지 않아 이 화면 혼자 동작합니다.'}
-          </Notice>
-        </div>
       }
       panel={{
         open: panel,
@@ -175,32 +178,27 @@ export function App() {
             <div className="live-strip" aria-live="polite">
               <span className="live-strip-h">새로 받은 연동</span>
               {recentIn.map((x, i) => (
-                <a key={i} href="#/metrics/activity" className={`live-item${(x.seq ?? 0) > highlightFrom.current ? ' fresh' : ''}`}>
+                <a key={i} href={convoHref(x.ctx)} className={`live-item${(x.seq ?? 0) > highlightFrom.current ? ' fresh' : ''}`}>
                   <Dep d={x.from} /> <Point>{x.point}</Point> <span className="muted small">{x.text}</span>
                 </a>
               ))}
             </div>
           )}
-          {section === 'requests' && <Requests key={tab} s={state} d={dispatch} view={tab as RequestView} />}
-          {section === 'work' && tab === 'specs' && <Specs s={state} d={dispatch} />}
-          {section === 'work' && tab === 'prs' && <Work s={state} d={dispatch} />}
-          {section === 'work' && tab === 'ops' && <Ops s={state} />}
-          {section === 'work' && tab === 'aftercare' && <Aftercare s={state} />}
-          {section === 'docs' && <Docs s={state} d={dispatch} />}
-          {section === 'talk' && <Talk s={state} d={dispatch} />}
-          {section === 'projects' && <Projects s={state} d={dispatch} sel={sub} />}
+          {section === 'requests' && <Requests key={tab} s={state} d={dispatch} view={tab as RequestView} item={item} />}
+          {section === 'work' && tab === 'specs' && <Specs s={state} d={dispatch} item={item} item2={item2} />}
+          {section === 'work' && tab === 'prs' && <Work s={state} d={dispatch} item={item} />}
+          {section === 'work' && tab === 'ops' && <Ops s={state} item={item} />}
+          {section === 'work' && tab === 'aftercare' && <Aftercare s={state} item={item} />}
+          {section === 'docs' && <Docs s={state} d={dispatch} item={item} />}
+          {section === 'talk' && <Talk s={state} d={dispatch} item={item} />}
+          {section === 'knowledge' && <Knowledge />}
+          {section === 'projects' && <Projects s={state} d={dispatch} sel={item} />}
           {section === 'metrics' && tab === 'overview' && <Metrics s={state} />}
           {section === 'metrics' && tab === 'autonomy' && <Autonomy s={state} d={dispatch} />}
-          {section === 'metrics' && tab === 'activity' && <Activity s={state} />}
+          {section === 'metrics' && tab === 'activity' && <Activity s={state} item={item} />}
           {section === 'metrics' && tab === 'links' && <Links s={state} d={dispatch} />}
         </main>
-      ) : (
-        <main className="page">
-          <Notice>
-            우리 부서가 참여한 사건 화면은 대시보드(병환) 공통 화면을 씁니다. 이 시연에서는 기획개발팀 화면만 만들었습니다.
-          </Notice>
-        </main>
-      )}
+      ) : null}
     </AppShell>
   )
 }
