@@ -9,11 +9,11 @@ interface Sender { kind: InboundKind; point: string; label: string; what: string
 const DEPTS: { dept: Dept; owner: string; senders: Sender[] }[] = [
   { dept: 'support', owner: '병환', senders: [
     { kind: 'support_ticket', point: 'create_ticket', label: '변경 요청 보내기', what: '반복 문의·버그를 기획개발 요청함에 등록' },
-    { kind: 'support_simple', point: 'create_ticket', label: '간단 요청 보내기', what: '문구·표시만 고치는 요청 → 기획서부터 머지까지 자동' },
+    { kind: 'support_simple', point: 'create_ticket', label: '간단 요청 보내기', what: '문구·표시만 고치는 요청 → 기준 안이면 머지까지 자동, 밖이면 교차검증' },
   ] },
   { dept: 'marketing', owner: '재헌', senders: [
     { kind: 'marketing_ticket', point: 'create_ticket', label: '변경 요청 보내기', what: '판매 사이트 변경 요청 (같은 요청이면 연결)' },
-    { kind: 'marketing_simple', point: 'create_ticket', label: '간단 요청 보내기', what: '문구·표시만 고치는 요청 → 기획서부터 머지까지 자동' },
+    { kind: 'marketing_simple', point: 'create_ticket', label: '간단 요청 보내기', what: '문구·표시만 고치는 요청 → 기준 안이면 머지까지 자동, 밖이면 교차검증' },
   ] },
   { dept: 'hr', owner: '준하', senders: [{ kind: 'hr_draft', point: 'ticket_draft_propose', label: '개선 초안 보내기', what: '③ 반복 패턴으로 만든 개선 초안' }] },
   { dept: 'data', owner: '재현', senders: [
@@ -22,6 +22,7 @@ const DEPTS: { dept: Dept; owner: string; senders: Sender[] }[] = [
   ] },
   { dept: 'infra', owner: '예진', senders: [{ kind: 'infra_query', point: 'find_related_prs', label: '직전 PR 질의', what: '장애 시각 직전 머지 PR 후보 요청' }] },
   { dept: 'orchestrator', owner: '준하', senders: [{ kind: 'orch_incident', point: 'incident.opened → link_incident', label: '장애 사건 개시', what: '사건을 열고 관련 PR·문단 연결 요청' }] },
+  { dept: 'finance', owner: '태윤', senders: [{ kind: 'finance_irreversible', point: 'create_ticket', label: '되돌릴 수 없는 요청 보내기', what: '결제 데이터 삭제 요청 → 사람 확인 대기열' }] },
   { dept: 'safety', owner: '태윤', senders: [{ kind: 'safety_verify', point: 'verify_rollback_target', label: '롤백 교차검증 요청', what: 'infra rollback_deployment(B)의 검증' }] },
 ]
 

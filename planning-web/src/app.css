@@ -367,3 +367,26 @@ a.plain-link:hover { color: var(--primary); }
 .outline { padding: 0 12px; }
 .doc-head { gap: 12px; }
 .doc-head .page-title { font-size: 24px; }
+
+/* 공통 흐름 레이아웃 (flow.tsx): 프로젝트 탭과 같은 틀을 요청·작업·운영·사후관리·지표에서 쓴다 */
+.pstage-name { width: 56px; }
+.pstage-detail, .pstage-empty { margin-left: 66px; }
+.flow-col { min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+.list-group { display: flex; flex-direction: column; gap: 2px; }
+.list-group + .list-group { margin-top: 14px; }
+.pairs { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 16px; margin: 0; font-size: 13.5px; }
+.pairs > div { display: contents; }
+.pairs dt { color: var(--text-3); }
+.pairs dd { margin: 0; color: var(--text-2); min-width: 0; }
+.pside-block .pairs { font-size: 13px; }
+.pside-block .actions { margin-top: 10px; flex-wrap: wrap; }
+.flow-sec { margin-top: 8px; }
+.flow-sec > h2 { font-size: 15px; font-weight: 600; margin: 0 0 4px; }
+.flow-sec + .flow-sec { border-top: 1px solid var(--border); padding-top: 18px; }
+.peer-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
+.peer-rows { list-style: none; margin: 0; padding: 0; }
+.peer-rows li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto 28px; gap: 10px; align-items: baseline; padding: 6px 0; border-top: 1px solid var(--border); font-size: 13px; }
+.peer-rows li:first-child { border-top: 0; }
+.peer-rows .num { font-variant-numeric: tabular-nums; color: var(--text); font-weight: 600; min-width: 24px; text-align: right; }
+.peer-rows li > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.peer-rows code.point { white-space: normal; word-break: break-all; }

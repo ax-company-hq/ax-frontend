@@ -6,7 +6,7 @@ import { useSharedStore } from './store'
 import { DeptSimulator } from './depts'
 import { Dep, Point } from './parts'
 import { AssistantBody, AssistantComposer, useAssistantChat } from './assistant'
-import { Activity, Aftercare, Autonomy, Links, Metrics, Ops, REQUEST_VIEWS, Requests, Specs, Work, type RequestView } from './pages'
+import { Activity, Aftercare, Audit, Autonomy, Links, Metrics, Ops, REQUEST_VIEWS, Requests, Reviews, Specs, Work, type RequestView } from './pages'
 import { Docs } from './docs'
 import { Talk } from './talk'
 import { COMPANY, findSiteIcon } from './company'
@@ -27,6 +27,7 @@ const SECTIONS = {
   work: { label: '작업', icon: 'plan', tabs: [
     { id: 'specs', label: '기획·기획서' },
     { id: 'prs', label: '작업·PR' },
+    { id: 'reviews', label: 'AI 교차검증' },
     { id: 'ops', label: '운영·배포' },
     { id: 'aftercare', label: '사후관리' },
   ] },
@@ -36,6 +37,7 @@ const SECTIONS = {
   metrics: { label: '지표', icon: 'dashboard', tabs: [
     { id: 'overview', label: '지표' },
     { id: 'autonomy', label: '자동 처리 범위' },
+    { id: 'audit', label: 'AI 승인 감사' },
     { id: 'activity', label: '에이전트 활동' },
     { id: 'links', label: '부서 연동' },
   ] },
@@ -151,7 +153,7 @@ export function App() {
       panel={{
         open: panel,
         title: 'AI 어시스턴트',
-        sub: '조회 + 문서 정리 · 확정·머지는 사람이 누름 (시연용 목 응답)',
+        sub: '조회 + 문서 정리 · 확정·머지는 조건·교차검증으로 자동, 되돌릴 수 없는 일만 사람 (시연용 목 응답)',
         onClose: () => setPanel(false),
         children: <AssistantBody chat={chat} />,
         footer: <AssistantComposer chat={chat} onClose={() => setPanel(false)} />,
@@ -164,7 +166,7 @@ export function App() {
           {tabs.length > 0 && (
             <div className="subtabs" role="tablist" aria-label={`${SECTIONS[section].label} 메뉴`}>
               {tabs.map((t) => {
-                const n = section === 'requests' ? state.requests.filter(REQUEST_VIEWS[t.id as RequestView].match).length : 0
+                const n = section === 'requests' ? state.requests.filter(REQUEST_VIEWS[t.id as RequestView].match).length : section === 'work' && t.id === 'reviews' ? state.reviews.filter((x) => !x.result).length : 0
                 return (
                   <a key={t.id} href={`#/${section}/${t.id}`} className={t.id === tab ? 'on' : ''} role="tab" aria-selected={t.id === tab}>
                     {t.label}
@@ -187,6 +189,7 @@ export function App() {
           {section === 'requests' && <Requests key={tab} s={state} d={dispatch} view={tab as RequestView} item={item} />}
           {section === 'work' && tab === 'specs' && <Specs s={state} d={dispatch} item={item} item2={item2} />}
           {section === 'work' && tab === 'prs' && <Work s={state} d={dispatch} item={item} />}
+          {section === 'work' && tab === 'reviews' && <Reviews s={state} d={dispatch} item={item} />}
           {section === 'work' && tab === 'ops' && <Ops s={state} item={item} />}
           {section === 'work' && tab === 'aftercare' && <Aftercare s={state} item={item} />}
           {section === 'docs' && <Docs s={state} d={dispatch} item={item} />}
@@ -194,7 +197,8 @@ export function App() {
           {section === 'knowledge' && <Knowledge />}
           {section === 'projects' && <Projects s={state} d={dispatch} sel={item} />}
           {section === 'metrics' && tab === 'overview' && <Metrics s={state} />}
-          {section === 'metrics' && tab === 'autonomy' && <Autonomy s={state} d={dispatch} />}
+          {section === 'metrics' && tab === 'autonomy' && <Autonomy s={state} d={dispatch} item={item} />}
+          {section === 'metrics' && tab === 'audit' && <Audit s={state} d={dispatch} />}
           {section === 'metrics' && tab === 'activity' && <Activity s={state} item={item} />}
           {section === 'metrics' && tab === 'links' && <Links s={state} d={dispatch} />}
         </main>
