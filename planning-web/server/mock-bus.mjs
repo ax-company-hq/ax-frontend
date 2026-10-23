@@ -14,6 +14,17 @@ const clients = new Set()
 // 에이전트가 한 단계씩 처리하는 걸 화면에서 볼 수 있게, 다음 단계를 STEP_MS 간격으로 진행한다
 const STEP_MS = Number(process.env.BUS_STEP_MS ?? 1200)
 let ticking = null
+// PLANNING_API_URL(예: http://127.0.0.1:8101)을 주면 다른 부서가 보낸 데이터를 planning 백엔드(목 모드)에도 그대로 넘긴다.
+// 화면은 여전히 이 버스를 보고, 백엔드는 같은 입력을 자기 규칙(#223 무클릭 진행)으로 처리한다. 실패해도 버스는 계속 돈다
+const PLANNING_API = process.env.PLANNING_API_URL
+const FORWARD = new Set(['inbound', 'answerQuestion'])
+function forward(action) {
+  if (!PLANNING_API || !FORWARD.has(action.type)) return
+  const { agent: _agent, ...body } = action // 백엔드 입력에 없는 화면 전용 필드는 뺀다
+  fetch(`${PLANNING_API}/api/planning/actions`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+    .then((r) => { if (!r.ok) console.warn(`planning 백엔드 ${action.type} ${r.status}`) })
+    .catch((e) => console.warn(`planning 백엔드 연결 실패: ${e.message}`))
+}
 function tick() {
   if (ticking) return
   ticking = setTimeout(() => {
@@ -69,6 +80,7 @@ const server = http.createServer(async (req, res) => {
       state = reducer(state, action)
       broadcast()
       tick()
+      forward(action)
       res.writeHead(200, { ...cors, 'Content-Type': 'application/json' })
       return res.end(JSON.stringify({ data: { seq: state.seq }, meta: {} }))
     } catch (e) {
@@ -79,6 +91,7 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'POST' && req.url === '/reset') {
     state = initialState
     broadcast()
+    if (PLANNING_API) fetch(`${PLANNING_API}/api/planning/reset`, { method: 'POST' }).catch(() => {})
     res.writeHead(200, { ...cors, 'Content-Type': 'application/json' })
     return res.end(JSON.stringify({ data: { reset: true }, meta: {} }))
   }
