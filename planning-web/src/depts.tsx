@@ -31,7 +31,8 @@ const DEPTS: { dept: Dept; owner: string; senders: Sender[] }[] = [
 const AGENT_DELAY_MS = 1500
 function useDeptAgents(s: State, d: Dispatch<Action>) {
   useEffect(() => {
-    const ask = s.specs.find((sp) => sp.status !== '확정' && sp.question && s.requests.some((r) => r.id === sp.request && r.flow))
+    // 기획서 질문은 출처와 상관없이 요청 부서 에이전트가 답한다 (시드 요청 포함)
+    const ask = s.specs.find((sp) => sp.status !== '확정' && sp.question && s.requests.some((r) => r.id === sp.request))
     const review = s.reviews.find((r) => r.lane === 'ai' && !r.result)
     const widen = s.autoPolicy.rules.find((r) => r.status === '승인 대기' && r.approver === '재무 AI')
     if (!ask && !review && !widen) return
