@@ -1,3 +1,5 @@
+import type { CommOutcome } from "./types";
+
 export const CATEGORY_KO: Record<string, string> = {
   refund: "환불·반품", cancel: "주문 취소", delivery: "배송", defect: "불량·파손·오배송", payment: "결제",
   product: "상품", review: "후기", account: "적립금·계정", other: "기타",
@@ -44,4 +46,14 @@ export const AUDIT_KO: Record<string, string> = {
 };
 export const OUTCOME_KO: Record<string, string> = {
   auto_rejected: "자동 거절", needs_info: "자료 요청", needs_review: "상담원 확인", approved_pending_return: "승인(입고 후 지급)", auto_approved: "자동 승인·지급",
+};
+
+/** 공통 로그 소통 결과 5가지 (dashboard-api communications.py CommunicationOutcome).
+ *  소통 탭과 AI 대화방이 이 표 하나만 쓴다 — 두 화면의 말이 어긋나지 않게. */
+export const COMM_OUTCOME_KO: Record<CommOutcome, string> = {
+  completed: "완료", rejected: "거절·실패", held: "보류(안전 관문)", needs_human: "사람 판단 필요", in_progress: "진행 중",
+};
+export const COMM_OUTCOME_TONE: Record<CommOutcome, string> = {
+  completed: "bg-emerald-50 text-emerald-700", rejected: "bg-red-50 text-red-700", held: "bg-amber-50 text-amber-700",
+  needs_human: "bg-amber-50 text-amber-700", in_progress: "bg-ink-100 text-ink-500",
 };

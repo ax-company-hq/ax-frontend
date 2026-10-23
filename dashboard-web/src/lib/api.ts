@@ -1,5 +1,5 @@
 import { ApiError } from "./apiError";
-import type { AdminReview, Claim, ClaimDetail, ClaimStats, Conversation, ConversationListItem, Dashboard, Health, Kpi, Me, QueueRun, QueueView, Summary, Validation } from "./types";
+import type { AdminReview, Claim, ClaimDetail, ClaimStats, CommLine, CommMeta, Conversation, ConversationListItem, Dashboard, Health, Kpi, Me, QueueRun, QueueView, Summary, Validation } from "./types";
 
 import { DASHBOARD_API_URL } from "./env";
 
@@ -44,6 +44,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.status === 204 ? (undefined as T) : unwrap<T>(await res.json());
 }
 
+/** `{data, meta}` 그대로 받는다 (meta가 필요한 목록용). 실패 처리는 request와 같다 */
+async function requestEnvelope<T, M>(path: string): Promise<{ data: T; meta: M }> {
+  const res = await fetch(`${BASE}${path}`, { cache: "no-store" });
+  const body: unknown = await res.json().catch(() => undefined);
+  if (!res.ok) throw toError(body, res.status);
+  return body as { data: T; meta: M };
+}
+
 const post = <T>(path: string, body?: unknown) =>
   request<T>(path, { method: "POST", body: body === undefined ? undefined : JSON.stringify(body) });
 
@@ -51,6 +59,11 @@ export const api = {
   health: () => request<Health>("/api/dashboard/health"),
   // 새 문의 만들기에서 가상 고객 목록을 고른다
   users: () => request<Me[]>("/api/dashboard/users"),
+  /** 부서 간 A2A 소통 (공통 로그). 공통 로그 읽기가 꽂히기 전에는 503 (목 모드 제외, ax-backend #249) */
+  communications: (q: { dept?: string; context_id?: string } = {}) => {
+    const qs = new URLSearchParams(Object.entries(q).filter(([, v]) => !!v) as [string, string][]).toString();
+    return requestEnvelope<CommLine[], CommMeta>(`/api/dashboard/communications${qs ? `?${qs}` : ""}`);
+  },
 
   // 상담원 화면. 읽기(GET)는 dashboard-api #17에 있다. 쓰기(POST)는 아직 서버에 없어 경로만 맞춰 둔 것이다.
   admin: {

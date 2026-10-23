@@ -143,3 +143,13 @@ export interface Dashboard {
 }
 
 export interface Health { status: string; llm_provider: string; kb_chunks: number; demo_tools: boolean }
+
+// ---------------------------------------------------------------- 공통 로그 소통 (dashboard-api GET /api/dashboard/communications)
+/** 결과 값 5가지. 소통 탭과 AI 대화방이 같은 값·같은 이름표(labels.ts COMM_OUTCOME_KO)를 쓴다 */
+export type CommOutcome = "completed" | "rejected" | "held" | "needs_human" | "in_progress";
+/** 소통 한 줄 (communications.py CommunicationLine). 코드가 만든 필드만 있고 payload·고객 원문은 없다 */
+export interface CommLine {
+  log_id: string; occurred_at: string; from_agent: string; to_agent: string | null; skill: string | null;
+  outcome: CommOutcome; context_id: string | null; execution_id: string | null;
+}
+export interface CommMeta { total: number; truncated: boolean }

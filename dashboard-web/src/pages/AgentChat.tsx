@@ -1,19 +1,25 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
-  ALL_ROOM, INCIDENT_STATUS_KO, SAFETY_ROOM, buildTimeline, incidentTitle, messageCount,
+  ALL_ROOM, DIRECT_ROOM, INCIDENT_STATUS_KO, SAFETY_ROOM, buildTimeline, incidentTitle, messageCount,
   type ChatItem, type DemoRequest, type OrchIncident, type Tone,
 } from "@/lib/agentChat";
+import { api, ApiError } from "@/lib/api";
 import { finance, type ExecutionRecord } from "@/lib/finance";
 import { Link } from "@/lib/nav";
 import { orchestrator } from "@/lib/orchestrator";
+import type { CommLine } from "@/lib/types";
 
 // AI 대화방. 부서 AI들이 A2A로 주고받은 일을 메신저처럼 보여 준다.
 // 말풍선 문장은 lib/agentChat.ts가 기록된 값으로만 만든다. 이 파일은 화면과 새로고침만 맡는다.
+// 출처 세 곳: 총괄(사건·단계), 안전 관문(돈이 나가는 실행), dashboard-api 공통 로그(부서 간 소통).
+// 운영 환경에서는 총괄·안전 관문 기록도 dashboard-api를 거쳐 읽어야 한다 (지금은 개발용 직접 호출, 백엔드 후속 작업).
 
 const POLL_MS = 3000;
 const ORCH_CMD = "cd ax-backend && ORCHESTRATOR_MOCK=1 uv run uvicorn ax_orchestrator.main:app --app-dir orchestrator/src --port 8000";
 
-type Conn = "unknown" | "on" | "off";
+/** unready = 서버는 답했지만 503 (공통 로그 읽기가 아직 연결 안 됨) */
+type Conn = "unknown" | "on" | "off" | "unready";
+const PROD_NOTE = "운영 환경에서는 대시보드가 총괄·안전 관문 기록도 dashboard-api를 거쳐 읽어야 합니다 (지금은 개발용으로 각 서버를 직접 부름).";
 
 // 이 화면에서 시작한 사건이 어느 시나리오였는지 기억한다 (방 이름에 쓰는 편의 기능, 없어도 동작)
 const SCENARIO_KEY = "agentChat.scenarios";
@@ -48,12 +54,13 @@ const hhmm = (iso: string) => (iso ? new Date(iso).toLocaleTimeString("ko-KR", {
 
 // ---------------------------------------------------------------- 연결 칩
 function ConnChip({ label, conn }: { label: string; conn: Conn }) {
-  const tone = conn === "on" ? "bg-emerald-50 text-emerald-700" : conn === "off" ? "bg-red-50 text-red-700" : "bg-ink-100 text-ink-500";
-  const dot = conn === "on" ? "bg-emerald-700" : conn === "off" ? "bg-red-700" : "bg-ink-500";
+  const tone = conn === "on" ? "bg-emerald-50 text-emerald-700" : conn === "off" ? "bg-red-50 text-red-700" : conn === "unready" ? "bg-amber-50 text-amber-700" : "bg-ink-100 text-ink-500";
+  const dot = conn === "on" ? "bg-emerald-700" : conn === "off" ? "bg-red-700" : conn === "unready" ? "bg-amber-700" : "bg-ink-500";
+  const word = { on: "켜짐", off: "꺼짐", unready: "준비 안 됨(503)", unknown: "확인 중" }[conn];
   return (
     <span className={`chip ${tone}`}>
       <span className={`h-1.5 w-1.5 rounded-full ${dot}`} aria-hidden="true" />
-      {label} {conn === "on" ? "켜짐" : conn === "off" ? "꺼짐" : "확인 중"}
+      {label} {word}
     </span>
   );
 }
@@ -98,9 +105,14 @@ function Message({ m }: { m: Extract<ChatItem, { kind: "msg" }> }) {
   );
 }
 
-function HoldBanner({ h, busy, canDecide, onDecide }: {
-  h: Extract<ChatItem, { kind: "hold" }>; busy: boolean; canDecide: boolean; onDecide: (approved: boolean) => void;
+function HoldBanner({ h, busy, canDecide, orchMock, onDecide }: {
+  h: Extract<ChatItem, { kind: "hold" }>; busy: boolean; canDecide: boolean; orchMock: boolean; onDecide: (approved: boolean) => void;
 }) {
+  // 결정 경로는 하나: 실제 C 보류는 안전 관문 보류 큐에서만. 총괄 보류 버튼은 목 모드 데모일 때만 보인다
+  // (총괄의 POST /api/incidents/{ctx}/holds/{step}은 사람 토큰을 확인하지 않음 — DSH-03)
+  const orchHold = !h.link;
+  const showButtons = orchHold && orchMock;
+  const link = h.link ?? (orchMock ? undefined : "/finance");
   const outcome = { approved: "사람이 승인 → 다시 진행", rejected: "사람이 거절 → 진행하지 않음", timeout: "기한 안에 결정 없음 → 자동 거절", pending: "" }[h.state];
   return (
     <li className="rounded-2xl bg-ink-900 px-4 py-3 text-app dark:bg-surface-2 dark:text-ink-900 dark:ring-1 dark:ring-amber-700/40">
@@ -111,10 +123,12 @@ function HoldBanner({ h, busy, canDecide, onDecide }: {
         </p>
         <time dateTime={h.at} className="tabular-nums text-[11px] opacity-70">{hhmm(h.at)}</time>
         {h.state !== "pending" && <span className="chip ml-auto bg-white/15 text-current dark:bg-ink-100">{outcome}</span>}
-        {h.state === "pending" && h.link && (
-          <Link href={h.link} className="btn ml-auto bg-white/15 text-current hover:bg-white/25 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-700 dark:bg-ink-100">재무 AI 화면에서 결정 →</Link>
+        {h.state === "pending" && link && (
+          <Link href={link} className="btn ml-auto bg-white/15 text-current hover:bg-white/25 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-700 dark:bg-ink-100">
+            {orchHold ? "안전 관문 보류 큐에서 결정 (/finance) →" : "재무 AI 화면에서 결정 →"}
+          </Link>
         )}
-        {h.state === "pending" && !h.link && (
+        {h.state === "pending" && showButtons && (
           <div className="ml-auto flex gap-2">
             <button className="btn bg-emerald-700 text-white hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700 dark:text-app"
               disabled={busy || !canDecide} onClick={() => onDecide(true)}>승인</button>
@@ -125,18 +139,19 @@ function HoldBanner({ h, busy, canDecide, onDecide }: {
       </div>
       <p className="mt-1 text-[11px] opacity-75">
         {h.detail}
-        {!h.link && h.state === "pending" && " · 중앙 Agent는 스스로 승인하지 않습니다. 여기서 누른 결정을 그대로 전달합니다."}
+        {showButtons && h.state === "pending" && " · 목 모드 데모 전용 버튼입니다. 중앙 Agent는 스스로 승인하지 않고, 여기서 누른 결정을 그대로 전달합니다."}
+        {orchHold && !orchMock && h.state === "pending" && " · 실제 모드에서는 C 등급 보류를 안전 관문 보류 큐 한 곳에서만 결정합니다 (이 화면의 총괄 결정 경로는 사람 확인이 없어 목 모드에서만 씁니다)."}
       </p>
     </li>
   );
 }
 
-function Item({ it, busyHold, orchOn, onDecide }: { it: ChatItem; busyHold: string | null; orchOn: boolean; onDecide: (h: Extract<ChatItem, { kind: "hold" }>, approved: boolean) => void }) {
+function Item({ it, busyHold, orchOn, orchMock, onDecide }: { it: ChatItem; busyHold: string | null; orchOn: boolean; orchMock: boolean; onDecide: (h: Extract<ChatItem, { kind: "hold" }>, approved: boolean) => void }) {
   switch (it.kind) {
     case "msg":
       return <Message m={it} />;
     case "hold":
-      return <HoldBanner h={it} busy={busyHold === it.id} canDecide={orchOn} onDecide={(a) => onDecide(it, a)} />;
+      return <HoldBanner h={it} busy={busyHold === it.id} canDecide={orchOn} orchMock={orchMock} onDecide={(a) => onDecide(it, a)} />;
     case "system":
       return (
         <li className="flex justify-center">
@@ -228,6 +243,11 @@ export default function AgentChat() {
   const [executions, setExecutions] = useState<ExecutionRecord[]>([]);
   const [orchConn, setOrchConn] = useState<Conn>("unknown");
   const [safetyConn, setSafetyConn] = useState<Conn>("unknown");
+  const [comms, setComms] = useState<CommLine[]>([]);
+  const [commConn, setCommConn] = useState<Conn>("unknown");
+  const [commTruncated, setCommTruncated] = useState(false);
+  // 총괄이 목 모드라고 알려 줄 때만(GET /api/incidents의 meta.mock) 총괄 보류에 승인·거절 버튼을 보인다
+  const [orchMock, setOrchMock] = useState(false);
   const [room, setRoom] = useState(ALL_ROOM);
   const [seen, setSeen] = useState<Record<string, number>>({});
   const [scenario, setScenario] = useState("hold");
@@ -239,9 +259,16 @@ export default function AgentChat() {
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    const [inc, exe] = await Promise.allSettled([orchestrator.incidents(), finance.executions()]);
-    if (inc.status === "fulfilled") { setIncidents(inc.value); setOrchConn("on"); } else setOrchConn("off");
+    const [inc, exe, com] = await Promise.allSettled([orchestrator.incidents(), finance.executions(), api.communications()]);
+    if (inc.status === "fulfilled") { setIncidents(inc.value.data); setOrchMock(inc.value.meta.mock === true); setOrchConn("on"); }
+    else { setOrchConn("off"); setOrchMock(false); }
     if (exe.status === "fulfilled") { setExecutions(exe.value); setSafetyConn("on"); } else setSafetyConn("off");
+    if (com.status === "fulfilled") { setComms(com.value.data); setCommTruncated(com.value.meta?.truncated === true); setCommConn("on"); }
+    else {
+      setComms([]);
+      setCommTruncated(false);
+      setCommConn(com.reason instanceof ApiError && com.reason.status === 503 ? "unready" : "off");
+    }
   }, []);
 
   // 3초마다 새로고침. 탭이 가려져 있으면 쉬고, 다시 보이면 바로 한 번
@@ -254,11 +281,12 @@ export default function AgentChat() {
   }, [refresh]);
 
   const counts = useMemo(() => {
-    const c: Record<string, number> = { [ALL_ROOM]: messageCount(buildTimeline(incidents, executions, ALL_ROOM)) };
-    for (const inc of incidents) c[inc.context_id] = messageCount(buildTimeline([inc], [], inc.context_id));
-    c[SAFETY_ROOM] = messageCount(buildTimeline([], executions, SAFETY_ROOM));
+    const c: Record<string, number> = {};
+    for (const id of [ALL_ROOM, SAFETY_ROOM, DIRECT_ROOM, ...incidents.map((i) => i.context_id)]) {
+      c[id] = messageCount(buildTimeline(incidents, executions, comms, id));
+    }
     return c;
-  }, [incidents, executions]);
+  }, [incidents, executions, comms]);
 
   const rooms: Room[] = useMemo(() => [
     { id: ALL_ROOM, title: "전체", count: counts[ALL_ROOM] ?? 0 },
@@ -272,14 +300,19 @@ export default function AgentChat() {
         count: counts[inc.context_id] ?? 0,
       };
     }),
+    {
+      id: DIRECT_ROOM, title: "부서 간 직통",
+      sub: commConn === "unready" ? "공통 로그 준비 안 됨" : commConn === "off" ? "연결 안 됨" : "사건에 묶이지 않은 부서끼리의 대화",
+      count: counts[DIRECT_ROOM] ?? 0,
+    },
     { id: SAFETY_ROOM, title: "안전 관문(돈이 나가는 일)", sub: safetyConn === "off" ? "연결 안 됨" : undefined, count: counts[SAFETY_ROOM] ?? 0 },
-  ], [incidents, counts, safetyConn, scenarioNames]);
+  ], [incidents, counts, safetyConn, commConn, scenarioNames]);
 
   // 지금 보고 있는 방은 읽음 처리
   useEffect(() => { setSeen((s) => (s[room] === counts[room] ? s : { ...s, [room]: counts[room] ?? 0 })); }, [room, counts]);
   const unseen = useMemo(() => Object.fromEntries(rooms.map((r) => [r.id, seen[r.id] == null ? 0 : Math.max(0, r.count - seen[r.id])])), [rooms, seen]);
 
-  const items = useMemo(() => buildTimeline(incidents, executions, room), [incidents, executions, room]);
+  const items = useMemo(() => buildTimeline(incidents, executions, comms, room), [incidents, executions, comms, room]);
 
   // ------------------------------------------------ 스크롤: 맨 아래에 붙어 있으면 따라가고, 위로 올렸으면 "새 메시지" 알약
   const scroller = useRef<HTMLDivElement>(null);
@@ -356,6 +389,7 @@ export default function AgentChat() {
           <div className="mt-2 flex flex-wrap gap-1.5">
             <ConnChip label="중앙 Agent" conn={orchConn} />
             <ConnChip label="안전 관문" conn={safetyConn} />
+            <ConnChip label="공통 로그" conn={commConn} />
             <span className="chip bg-ink-100 text-ink-500">{POLL_MS / 1000}초마다 새로고침</span>
           </div>
         </div>
@@ -396,15 +430,17 @@ export default function AgentChat() {
         <section aria-label="대화 기록" className="card relative flex min-h-[420px] min-w-0 flex-1 flex-col overflow-hidden">
           <div ref={scroller} onScroll={onScroll} className="scroll-thin min-h-0 flex-1 overflow-y-auto px-4 py-5 lg:px-6">
             {roomEmpty ? (
-              <EmptyState orchConn={orchConn} safetyConn={safetyConn} room={room} />
+              <EmptyState orchConn={orchConn} safetyConn={safetyConn} commConn={commConn} room={room} />
             ) : (
               <>
               {orchConn === "off" && room === ALL_ROOM && (
                 <p className="mx-auto mb-4 max-w-3xl rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800">중앙 Agent(총괄)가 꺼져 있어 안전 관문 기록만 보입니다. 켜는 방법: <code className="font-mono">{ORCH_CMD}</code></p>
               )}
+              {room === ALL_ROOM && <CommNote conn={commConn} truncated={commTruncated} />}
               <ol role="log" aria-live="polite" aria-relevant="additions" aria-label="부서 AI 대화" className="mx-auto flex max-w-3xl flex-col gap-4">
-                {items.map((it) => <Item key={it.id} it={it} busyHold={busyHold} orchOn={orchOn} onDecide={decide} />)}
+                {items.map((it) => <Item key={it.id} it={it} busyHold={busyHold} orchOn={orchOn} orchMock={orchMock} onDecide={decide} />)}
               </ol>
+              <p className="mx-auto mt-6 max-w-3xl text-center text-[11px] text-ink-500">{PROD_NOTE}</p>
               </>
             )}
           </div>
@@ -420,7 +456,28 @@ export default function AgentChat() {
   );
 }
 
-function EmptyState({ orchConn, safetyConn, room }: { orchConn: Conn; safetyConn: Conn; room: string }) {
+/** 공통 로그가 503이거나 꺼졌을 때 / 잘렸을 때 한 줄 안내 */
+function CommNote({ conn, truncated }: { conn: Conn; truncated: boolean }) {
+  if (conn === "unready") return <p className="mx-auto mb-4 max-w-3xl rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800">{COMM_503}</p>;
+  if (conn === "off") return <p className="mx-auto mb-4 max-w-3xl rounded-xl bg-ink-50 px-3 py-2 text-xs text-ink-500">{COMM_OFF}</p>;
+  if (truncated) return <p className="mx-auto mb-4 max-w-3xl rounded-xl bg-ink-50 px-3 py-2 text-xs text-ink-500">공통 로그가 많아 앞부분만 받았습니다 (최대 1000줄).</p>;
+  return null;
+}
+const COMM_503 = "공통 로그: 준비 안 됨(503) — dashboard-api에 공통 로그 읽기가 아직 연결되지 않았습니다 (ax-backend #249). 부서 간 직통 대화는 연결 뒤에 보입니다. 목 모드(DASHBOARD_MOCK=1)에서는 예시 대화가 나옵니다.";
+const COMM_OFF = "공통 로그: dashboard-api(VITE_DASHBOARD_API_URL)에 연결할 수 없어 부서 간 직통 대화를 불러오지 못했습니다.";
+
+function EmptyState({ orchConn, safetyConn, commConn, room }: { orchConn: Conn; safetyConn: Conn; commConn: Conn; room: string }) {
+  if (room === DIRECT_ROOM) {
+    return (
+      <div className="mx-auto max-w-md py-16 text-center text-sm text-ink-500">
+        {commConn === "unready" ? COMM_503
+          : commConn === "off" ? COMM_OFF
+          : commConn === "unknown" ? "불러오는 중…"
+          : "아직 사건에 묶이지 않은 부서 간 대화가 없습니다. 공통 로그에서 부서끼리 직접 주고받은 A2A 요청·응답이 여기에 쌓입니다."}
+        <p className="mt-4 text-[11px]">{PROD_NOTE}</p>
+      </div>
+    );
+  }
   if (room === SAFETY_ROOM) {
     return (
       <div className="mx-auto max-w-md py-16 text-center text-sm text-ink-500">
@@ -444,6 +501,8 @@ function EmptyState({ orchConn, safetyConn, room }: { orchConn: Conn; safetyConn
   return (
     <div className="mx-auto max-w-md py-16 text-center text-sm text-ink-500">
       아직 사건이 없습니다. 위의 <b className="text-ink-900">장애 시나리오 시작</b>을 눌러 보세요.
+      {commConn === "unready" && <p className="mt-4 text-xs">{COMM_503}</p>}
+      <p className="mt-4 text-[11px]">{PROD_NOTE}</p>
     </div>
   );
 }

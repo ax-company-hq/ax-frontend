@@ -1,6 +1,8 @@
 import type { ExecutionRecord } from "./finance";
+import { COMM_OUTCOME_KO } from "./labels";
+import type { CommLine, CommOutcome } from "./types";
 
-// AI 대화방: 총괄(orchestrator)의 사건 기록과 안전 관문(safety)의 실행 기록을
+// AI 대화방: 총괄(orchestrator)의 사건 기록, 안전 관문(safety)의 실행 기록, 공통 로그의 부서 간 소통(dashboard-api)을
 // "누가 누구에게 무엇을 보냈나" 메시지로 바꾼다. 문장은 기록된 값(skill·상태·숫자·id)으로만 만들고
 // 부서가 돌려준 자유 문장(summary·note·untrusted 등)은 화면에 옮기지 않는다. 화면 없는 순수 함수만 둔다.
 
@@ -104,6 +106,8 @@ export type ChatItem =
   | { kind: "separator"; id: string; at: string; room: string; text: string; variant: "day" | "topic" };
 
 export const SAFETY_ROOM = "safety";
+/** 총괄 사건에 묶이지 않는 공통 로그 소통 (부서끼리 직접 주고받은 A2A) */
+export const DIRECT_ROOM = "direct";
 export const ALL_ROOM = "all";
 
 // ---------------------------------------------------------------- 안전한 결과 값만 고르기
@@ -349,11 +353,59 @@ function verifierName(v: string) {
   return v === "finance" ? "재무 AI" : speaker(v);
 }
 
+// ---------------------------------------------------------------- 공통 로그 소통 → 메시지
+const COMM_TONE: Record<CommOutcome, Tone> = { completed: "ok", rejected: "fail", held: "warn", needs_human: "warn", in_progress: "request" };
+
+/** 소통 한 줄이 들어갈 방: 총괄 사건과 context_id가 같으면 그 사건 방, 아니면 "부서 간 직통" */
+export function commRoom(line: CommLine, incidentIds: ReadonlySet<string>): string {
+  return line.context_id && incidentIds.has(line.context_id) ? line.context_id : DIRECT_ROOM;
+}
+
+/** 총괄 사건 방에서 총괄이 보내거나 받은 줄인데 같은 skill 단계가 이미 있으면 총괄 기록이 같은 일을 보여 준다 */
+function coveredByIncident(line: CommLine, inc: OrchIncident | undefined): boolean {
+  if (!inc || !line.skill) return false;
+  if (line.from_agent !== CENTRAL && line.to_agent !== CENTRAL) return false;
+  return inc.steps.some((s) => s.skill === line.skill);
+}
+
+/**
+ * 공통 로그 한 줄 → 말풍선. 문장은 skill·결과 값으로만 만든다(payload는 dashboard-api가 이미 뺐다).
+ * `execution_id`가 안전 관문 기록과 같으면 `dupOf`에 그 id를 넣는다 — 전체 방에서는 빼고, 사건 방에서는 연결 표시만 단다.
+ */
+export function commItem(line: CommLine, room: string, safetyIds: ReadonlySet<string>): Extract<ChatItem, { kind: "msg" }> & { dupOf?: string } {
+  const skill = line.skill ?? "skill 미기록";
+  const label = COMM_OUTCOME_KO[line.outcome] ?? line.outcome;
+  const dupOf = line.execution_id && safetyIds.has(line.execution_id) ? line.execution_id : undefined;
+  const tag = [
+    skill, "공통 로그",
+    dupOf ? `안전 관문 방의 ${dupOf} 기록과 같은 건` : line.execution_id ?? null,
+    room === DIRECT_ROOM ? line.context_id : null,
+  ].filter(Boolean).join(" · ");
+  const holdHint = line.outcome === "held" && !dupOf ? " — 안전 관문 보류 큐(/finance)에서 결정" : "";
+  return {
+    kind: "msg", id: `log:${line.log_id}`, at: line.occurred_at, room,
+    from: speaker(line.from_agent), to: line.to_agent ? speaker(line.to_agent) : "받는 쪽 미기록",
+    fromKey: line.from_agent, central: line.from_agent === CENTRAL,
+    text: `${actionKo(skill)}: ${label}${holdHint}`, tag, tone: COMM_TONE[line.outcome] ?? "muted", facts: [], dupOf,
+  };
+}
+
+/** 소통 줄을 방별 말풍선으로. 총괄 기록과 겹치는 줄은 빼고, 안전 관문과 겹치는 줄은 `dupOf`를 단다 */
+export function commItems(comms: CommLine[], incidents: OrchIncident[], executions: ExecutionRecord[]) {
+  const byId = new Map(incidents.map((i) => [i.context_id, i]));
+  const ids = new Set(byId.keys());
+  const safetyIds = new Set(executions.map((e) => e.execution_id));
+  return comms
+    .map((line) => ({ line, room: commRoom(line, ids) }))
+    .filter(({ line, room }) => !coveredByIncident(line, byId.get(room)))
+    .map(({ line, room }) => commItem(line, room, safetyIds));
+}
+
 // ---------------------------------------------------------------- 합치기
 const time = (iso: string) => (iso ? new Date(iso).getTime() : 0);
 
 /** 방 하나(또는 전체)의 타임라인. 시간순, 같은 시각이면 만들어진 순서를 지킨다 */
-export function buildTimeline(incidents: OrchIncident[], executions: ExecutionRecord[], room: string): ChatItem[] {
+export function buildTimeline(incidents: OrchIncident[], executions: ExecutionRecord[], comms: CommLine[], room: string): ChatItem[] {
   const items: ChatItem[] = [];
   for (const inc of incidents) {
     if (room !== ALL_ROOM && room !== inc.context_id) continue;
@@ -362,6 +414,13 @@ export function buildTimeline(incidents: OrchIncident[], executions: ExecutionRe
   if (room === ALL_ROOM || room === SAFETY_ROOM) {
     const recs = [...executions].sort((a, b) => time(a.created_at) - time(b.created_at));
     for (const rec of recs) items.push(...executionItems(rec));
+  }
+  for (const c of commItems(comms, incidents, executions)) {
+    // 전체 방에서는 안전 관문 기록과 같은 건(execution_id 일치)을 두 번 보이지 않는다
+    if (room === ALL_ROOM ? !c.dupOf : room === c.room) {
+      const { dupOf: _dup, ...msg } = c;
+      items.push(msg);
+    }
   }
   const indexed = items.map((it, i) => ({ it, i }));
   indexed.sort((a, b) => time(a.it.at) - time(b.it.at) || a.i - b.i);
