@@ -1327,11 +1327,11 @@ function step(s: State): State {
   }
   for (const sp of s.specs) {
     const r = s.requests.find((x) => x.id === sp.request)
-    if (!r?.flow) continue
-    if (sp.status !== '확정' && !s.reviews.some((x) => x.ref === sp.id)) {
+    if (r?.flow && sp.status !== '확정' && !s.reviews.some((x) => x.ref === sp.id)) {
       const n = trySpecAuto(s, sp.id)
       if (moved(n)) return n
     }
+    // PR 만들기는 요청 출처와 상관없이 확정된 기획서면 언제나 이어 간다 (시드 요청·사람 확정 건 포함)
     if (sp.status === '확정' && s.tasks.some((x) => x.spec === sp.id && x.state === '진행 중' && !s.prs.some((p) => p.task === x.id))) return genPrs(s, sp.id, false)
   }
   for (const p of s.prs) {
