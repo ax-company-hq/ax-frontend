@@ -4,6 +4,7 @@ import { ThemeProvider } from '@/components/ThemeProvider'
 import { ShopShell } from '@/components/shop/ShopShell'
 import { AuthProvider } from '@/lib/auth'
 import { CartProvider } from '@/lib/cart'
+import AxOrders from '@/pages/AxOrders'
 import Cart from '@/pages/Cart'
 import Checkout from '@/pages/Checkout'
 import Home from '@/pages/Home'
@@ -27,6 +28,7 @@ export function App() {
               <Route path="/cart" element={<Cart />} />
               <Route path="/checkout" element={<Checkout />} />
               <Route path="/login" element={<Login />} />
+              <Route path="/ax-orders" element={<AxOrders />} />
               <Route path="/orders" element={<Orders />} />
               <Route path="/orders/:id" element={<OrderDetail />} />
               <Route path="/support" element={<Support />} />
