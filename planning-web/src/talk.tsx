@@ -6,6 +6,7 @@ import {Select, useToast } from '@dejafix/common-frontend'
 import { DEPT_NAME, type Action, type Activity, type Dept, type Message, type State, type Thread } from './data'
 import { Linked, Ref } from './links'
 import { Dep, Grade, Point, Tag } from './parts'
+import { useCommunications } from './comms'
 
 // 채널마다 마지막으로 본 메시지 수 (화면을 옮겨도 유지)
 const seen = new Map<string, number>()
@@ -32,7 +33,10 @@ export function convosOf(s: State): Convo[] {
     .sort((a, b) => s.activity.lastIndexOf(b.items[b.items.length - 1]) - s.activity.lastIndexOf(a.items[a.items.length - 1]))
 }
 
-export function Talk({ s, d, item }: { s: State; d: Dispatch<Action>; item?: string }) {
+export function Talk({ s: state, d, item }: { s: State; d: Dispatch<Action>; item?: string }) {
+  // 실제 모드면 에이전트 대화는 공통 로그(dashboard-api)에서, 목 모드면 연동 버스 활동에서
+  const live = useCommunications('planning')
+  const s = live ? { ...state, activity: live } : state
   const convos = convosOf(s)
   const convo = item?.startsWith('ctx_') ? convos.find((c) => c.ctx === item) : undefined
   return (

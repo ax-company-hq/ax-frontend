@@ -40,6 +40,7 @@ npm run build -w planning-web
 
 - `PLANNING_WEB_BASE=/admin/planning/ npm run build -w @ax/planning-web` — 자산 경로만 바뀌고, 화면 이동은 해시(`#/...`)라 그대로 동작한다.
 - `VITE_PLANNING_MOCK=0`이면 목 버스에 연결하지 않는다(실제 planning API로 바꿀 자리). 기본값은 1(목 모드).
+- `VITE_PLANNING_MOCK=0`이면 소통 › 에이전트 대화를 dashboard-api `GET /api/dashboard/communications?dept=planning`(공통 로그)에서 5초마다 읽는다(`src/comms.ts`). 3002로 따로 띄울 때는 dashboard-api `DASHBOARD_CORS_ORIGINS`에 `http://localhost:3002`를 더한다(관리자 한 포트면 같은 출처라 필요 없음).
 - 고객사 값은 루트 `.env`의 `VITE_COMPANY_NAME`·`VITE_COMPANY_TAGLINE`·`VITE_SHOP_WEB_URL`·`VITE_COMPANY_LOGO`(`src/company.ts`).
 
 ## 3. 입출력 계약
