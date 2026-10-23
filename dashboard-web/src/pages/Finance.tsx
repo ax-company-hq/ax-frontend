@@ -830,12 +830,12 @@ export default function FinancePage() {
         </div>
       </Section>
 
-      {/* ⑤ 참고: 접어 둔다 */}
+      {/* ⑤ 참고: 늘 펼쳐 둔다 */}
       <div className="grid gap-4 xl:grid-cols-2">
-        <details className="card p-5">
-          <summary className="cursor-pointer text-base font-semibold text-ink-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500">
+        <section aria-labelledby="finance-skills" className="card p-5">
+          <h2 id="finance-skills" className="text-base font-semibold text-ink-900">
             재무 AI가 하는 일 <span className="text-xs font-normal text-ink-500">{card?.skills.length ?? 0}가지</span>
-          </summary>
+          </h2>
           <ul className="mt-3 space-y-2">
             {(card?.skills ?? []).map((s) => {
               const k = SKILL_KO[s.id];
@@ -851,13 +851,13 @@ export default function FinancePage() {
             })}
             {!card && <li className="py-4 text-center text-xs text-ink-500">재무 AI 정보를 불러올 수 없습니다.</li>}
           </ul>
-        </details>
+        </section>
 
-        <details className="card p-5" open={changesWaiting > 0 ? true : undefined}>
-          <summary className="cursor-pointer text-base font-semibold text-ink-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500">
+        <section aria-labelledby="finance-review-rules" className="card p-5">
+          <h2 id="finance-review-rules" className="text-base font-semibold text-ink-900">
             사람 확인 기준 <span className="text-xs font-normal text-ink-500">{thresholds ? `결정 기한 ${deadline}` : ""}</span>
             {changesWaiting > 0 && <> <Chip label={`기준 바꾸기 ${changesWaiting}건 확인 대기`} tone="bg-amber-100 text-amber-800" /></>}
-          </summary>
+          </h2>
           <p className="mt-2 text-xs text-ink-500">아래 기준에 걸리면 AI가 처리하지 않고 사람이 결정합니다. 기준은 아래 "기준 바꾸기 요청"으로 바꿀 수 있고, 안전 장치 범위 안에서 재무 AI가 정합니다{thresholds && ` (현재 ${thresholds.version}번째 기준)`}.</p>
           <ul className="mt-2 space-y-1.5 text-sm">
             {(thresholds?.rules ?? []).map((r) => (
@@ -870,7 +870,7 @@ export default function FinancePage() {
             ))}
           </ul>
           <ThresholdChangePanel thresholds={thresholds} changes={changes} reload={load} />
-        </details>
+        </section>
       </div>
     </div>
   );
