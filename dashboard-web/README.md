@@ -13,8 +13,8 @@
 | `/queue` | 보상 큐: 입고 순서대로 환불·보상 지급 |
 | `/reviews` | 후기 관리: 보류 후기 공개·숨김 |
 | `/kb` | 지식베이스(정책 문서 조각) |
-| `/finance` | 재무 AI: 사람 확인이 필요한 일(진행·멈춤, 10분 지나면 자동 취소), 장애 손실, 재무 AI가 다시 계산한 결과, 처리 내역, 재무 AI가 하는 일, 사람 확인 기준 (safety 8001·finance 8105 조회) |
-| `/finance/guide` | 재무 AI 관리자 사용법 (결정하는 법, 이유별 판단 기준, 자주 묻는 질문) |
+| `/finance` | 재무 AI(캣북스 재무팀): 지금 사람이 할 일, 오늘의 재무, ① 결산·리포트 ② 매출·PG 대사 ③ 판매자 정산 ⑤ 예산·한도 정책 ⑦ 내부통제·감사, 안전 장치 보류 큐(진행·멈춤), 장애 손실, 캣북스에서 들어온 일 (finance 8105·safety 8001) |
+| `/finance/guide` | 재무 AI 관리자 사용법 (5개 모듈 설명, 보류 큐에서 결정하는 법, 자주 묻는 질문) |
 
 상단 '쇼핑몰 보기'는 루트 `.env`의 `VITE_SHOP_WEB_URL`(기본 `http://localhost:3000`)을 연다.
 
@@ -46,7 +46,7 @@ VITE_DASHBOARD_API_URL=http://localhost:8020
 **임시:** dashboard-api의 OpenAPI가 `contracts/openapi/`에 반영되기 전이라 catbooks의 타입을 `src/lib/types.ts`에 그대로 옮겨 두었다.
 dashboard-api가 이 API를 열고 `npm run gen:types`로 타입이 생기면 `src/lib/types.ts`를 지우고 `@ax/types/dashboard-api`로 바꾼다.
 
-호출 경로는 `src/lib/api.ts` 한 곳에 있다. 재무·안전 화면만 `src/lib/finance.ts`가 safety(`VITE_SAFETY_API_URL`)·finance(`VITE_FINANCE_AGENT_URL`) 조회 API를 직접 부른다(임시: dashboard-api 경유로 옮길 예정). C 보류 결정은 사람 토큰(`VITE_SAFETY_HUMAN_TOKEN`, 목 모드는 `human:<이름>`)이 있어야 버튼이 켜진다. 응답은 ax-backend 규약 `{data, meta}` / `{error: {code, message}}`로 받는다.
+호출 경로는 `src/lib/api.ts` 한 곳에 있다. 재무·안전 화면만 `src/lib/finance.ts`가 safety(`VITE_SAFETY_API_URL`)·finance(`VITE_FINANCE_AGENT_URL`) 조회 API를 직접 부른다(임시: dashboard-api 경유로 옮길 예정). 결산 확정·대사 메모·C 보류 결정은 사람 토큰(`VITE_SAFETY_HUMAN_TOKEN`, 목 모드는 `human:<이름>`)이 있어야 버튼이 켜진다. 응답은 ax-backend 규약 `{data, meta}` / `{error: {code, message}}`로 받는다.
 
 | 메서드 | 경로 | 서버 |
 | --- | --- | --- |
