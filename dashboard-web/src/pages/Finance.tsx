@@ -530,6 +530,12 @@ export default function FinancePage() {
   const pendingMoney = pending.reduce((sum, r) => sum + (r.report.computed_amount ?? 0), 0);
   const flow = flowOf(executions, reviews);
   const pct = (n: number) => (flow.total ? `${(n / flow.total) * 100}%` : "0%");
+  const lanes = [
+    { title: "바로 처리", count: flow.direct, bar: "bg-emerald-700", border: "border-emerald-700", detail: "공지, 기록처럼 돈이 나가지 않는 일" },
+    { title: "재무 AI가 확인 후 처리", count: flow.checked, bar: "bg-brand-500", border: "border-brand-500", detail: `통과 ${flow.checkedPass}건, 막음 ${flow.checkedStop}건. 금액과 받을 사람을 원래 자료로 다시 계산` },
+    { title: "기준 넘음 → AI가 결정", count: flow.ai, bar: "bg-brand-700", border: "border-brand-700", detail: "재량 한도 안이면 승인, 근거가 틀리면 거절" },
+    { title: "사람이 결정", count: flow.human, bar: "bg-amber-700", border: "border-amber-700", detail: `아주 큰 금액, 정산 확정, 자료가 없는 건. 지금 ${pending.length}건이 기다림` },
+  ];
   const tone = pending.length ? "text-amber-800" : "text-emerald-800";
 
   return (
@@ -708,29 +714,28 @@ export default function FinancePage() {
           <div className="flex items-baseline gap-2">
             <span className="text-3xl font-bold tabular-nums">{flow.total}</span><span className="text-sm text-ink-500">건 요청</span>
           </div>
-          <div className="mt-3 flex h-3 overflow-hidden rounded-full bg-ink-100" role="img" aria-label={`바로 처리 ${flow.direct}건, 재무 AI 확인 ${flow.checked}건, AI가 결정 ${flow.ai}건, 사람이 결정 ${flow.human}건`}>
-            <div className="bg-emerald-700" style={{ width: pct(flow.direct) }} />
-            <div className="bg-brand-500" style={{ width: pct(flow.checked) }} />
-            <div className="bg-brand-700" style={{ width: pct(flow.ai) }} />
-            <div className="bg-amber-700" style={{ width: pct(flow.human) }} />
+          <div className="mt-3 flex h-3 rounded-full bg-ink-100" role="img" aria-label={lanes.map((l) => `${l.title} ${l.count}건`).join(", ")}>
+            {lanes.filter((l) => l.count > 0).map((l, i, shown) => (
+              <div
+                key={l.title}
+                tabIndex={0}
+                className={`group relative ${l.bar} ${i === 0 ? "rounded-l-full" : ""} ${i === shown.length - 1 ? "rounded-r-full" : ""} focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500`}
+                style={{ width: pct(l.count) }}
+              >
+                <div role="tooltip" className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 hidden w-64 -translate-x-1/2 rounded-lg bg-ink-900 px-3 py-2 text-xs text-white shadow-lg group-hover:block group-focus-visible:block">
+                  <p className="font-semibold">{l.title} <span className="tabular-nums">{l.count}건</span></p>
+                  <p className="mt-0.5 text-ink-100">{l.detail}</p>
+                </div>
+              </div>
+            ))}
           </div>
           <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="border-l-4 border-emerald-700 pl-3">
-              <p className="text-sm font-semibold">바로 처리 <span className="tabular-nums">{flow.direct}건</span></p>
-              <p className="text-xs text-ink-500">공지, 기록처럼 돈이 나가지 않는 일</p>
-            </div>
-            <div className="border-l-4 border-brand-500 pl-3">
-              <p className="text-sm font-semibold">재무 AI가 확인 후 처리 <span className="tabular-nums">{flow.checked}건</span></p>
-              <p className="text-xs text-ink-500">통과 {flow.checkedPass}건, 막음 {flow.checkedStop}건. 금액과 받을 사람을 원래 자료로 다시 계산</p>
-            </div>
-            <div className="border-l-4 border-brand-700 pl-3">
-              <p className="text-sm font-semibold">기준 넘음 → AI가 결정 <span className="tabular-nums">{flow.ai}건</span></p>
-              <p className="text-xs text-ink-500">재량 한도 안이면 승인, 근거가 틀리면 거절</p>
-            </div>
-            <div className="border-l-4 border-amber-700 pl-3">
-              <p className="text-sm font-semibold">사람이 결정 <span className="tabular-nums">{flow.human}건</span></p>
-              <p className="text-xs text-ink-500">아주 큰 금액, 정산 확정, 자료가 없는 건. 지금 {pending.length}건이 기다림</p>
-            </div>
+            {lanes.map((l) => (
+              <div key={l.title} className={`border-l-4 ${l.border} pl-3`}>
+                <p className="text-sm font-semibold">{l.title} <span className="tabular-nums">{l.count}건</span></p>
+                <p className="text-xs text-ink-500">{l.detail}</p>
+              </div>
+            ))}
           </div>
         </div>
       </Section>
