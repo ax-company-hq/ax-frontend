@@ -86,7 +86,7 @@ function Message({ m }: { m: Extract<ChatItem, { kind: "msg" }> }) {
           <span className="chip bg-ink-100 px-1.5 py-0 text-[10px] text-ink-500">→ {m.to}</span>
           <time dateTime={m.at} className="tabular-nums text-[11px] text-ink-500">{hhmm(m.at)}</time>
         </div>
-        <div className={`mt-1 rounded-2xl px-3.5 py-2 text-sm leading-relaxed ${right ? "rounded-tr-md" : "rounded-tl-md"} ${look.bubble} ${right ? "" : TONE_MARK[m.tone]}`}>
+        <div title={m.raw} className={`mt-1 rounded-2xl px-3.5 py-2 text-sm leading-relaxed ${right ? "rounded-tr-md" : "rounded-tl-md"} ${look.bubble} ${right ? "" : TONE_MARK[m.tone]}`}>
           <p>{right ? "" : TONE_ICON[m.tone]}{m.text}</p>
           {m.facts.length > 0 && (
             <dl className="mt-1.5 flex flex-wrap gap-1.5">
@@ -98,7 +98,7 @@ function Message({ m }: { m: Extract<ChatItem, { kind: "msg" }> }) {
               ))}
             </dl>
           )}
-          {m.tag && <p className={`mt-1 font-mono text-[10px] ${right ? "text-white/70" : "text-ink-500"}`}>{m.tag}</p>}
+          {m.tag && <p className={`mt-1 text-[11px] ${right ? "text-white/70" : "text-ink-500"}`}>{m.tag}</p>}
         </div>
       </div>
     </li>
@@ -163,11 +163,11 @@ function Item({ it, busyHold, orchOn, orchMock, onDecide }: { it: ChatItem; busy
     case "separator":
       return it.variant === "day" ? (
         <li role="separator" className="flex items-center gap-3 pt-2 text-[11px] font-medium text-ink-500">
-          <span className="h-px flex-1 bg-ink-100" />{it.text}<span className="h-px flex-1 bg-ink-100" />
+          <span className="h-px flex-1 bg-ink-100" /><span title={it.raw} className={it.raw ? "cursor-help" : undefined}>{it.text}</span><span className="h-px flex-1 bg-ink-100" />
         </li>
       ) : (
         <li role="separator" className="pt-1">
-          <p className="text-center text-xs font-semibold text-ink-700">{it.text}</p>
+          <p title={it.raw} className={`text-center text-xs font-semibold text-ink-700 ${it.raw ? "cursor-help" : ""}`}>{it.text}</p>
         </li>
       );
   }
@@ -199,7 +199,7 @@ function RoomList({ rooms, selected, unseen, onSelect }: { rooms: Room[]; select
                 </div>
                 {(r.sub || r.status) && (
                   <div className="mt-1 flex items-center gap-1.5">
-                    {r.status && <span className={`chip ${STATUS_TONE[r.status] ?? "bg-ink-100 text-ink-500"}`}>{INCIDENT_STATUS_KO[r.status] ?? r.status}</span>}
+                    {r.status && <span className={`chip shrink-0 whitespace-nowrap ${STATUS_TONE[r.status] ?? "bg-ink-100 text-ink-500"}`}>{INCIDENT_STATUS_KO[r.status] ?? r.status}</span>}
                     {r.sub && <span className="truncate text-[11px] text-ink-500">{r.sub}</span>}
                   </div>
                 )}
@@ -295,7 +295,7 @@ export default function AgentChat() {
       return {
         id: inc.context_id,
         title: name ?? incidentTitle(inc),
-        sub: `${name ? `${incidentTitle(inc)} · ` : ""}${clock(inc.opened_at)} 시작`,
+        sub: `${clock(inc.opened_at)} 시작${name ? ` · ${incidentTitle(inc)}` : ""}`,
         status: inc.status,
         count: counts[inc.context_id] ?? 0,
       };

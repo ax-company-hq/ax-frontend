@@ -72,6 +72,17 @@ const METRIC_KO: Record<string, string> = {
 function metricOf(inc: OrchIncident): string | null {
   return /\(([^)]+)\)\s*$/.exec(inc.title)?.[1] ?? null;
 }
+/** "오후 5:44" */
+export const clockKo = (iso: string) => new Date(iso).toLocaleTimeString("ko-KR", { hour: "numeric", minute: "2-digit" });
+/** 결과의 id·번호 값 (말풍선에는 빼고 툴팁의 코드 정보로만) */
+function idsOf(output: Record<string, unknown> | null | undefined): string[] {
+  if (!output) return [];
+  return Object.entries(output)
+    .filter(([k, v]) => ID_KEY.test(k) && typeof v === "string" && SAFE_TOKEN.test(v))
+    .map(([k, v]) => `${k}=${v as string}`);
+}
+const rawOf = (...parts: (string | null | undefined | false)[]) => parts.filter(Boolean).join(" · ") || undefined;
+
 /** 방 이름: "결제 장애 — 서버 오류(5xx) 급증" */
 export function incidentTitle(inc: OrchIncident): string {
   const comp = COMPONENT_KO[inc.component] ?? inc.component;
@@ -79,13 +90,31 @@ export function incidentTitle(inc: OrchIncident): string {
   return metric ? `${comp} 장애 — ${METRIC_KO[metric] ?? metric}` : `${comp} 장애`;
 }
 
+// skill·액션 이름표. 화면에는 이 이름만 보이고 코드 이름은 마우스를 올리면(툴팁) 보인다
 const ACTION_KO: Record<string, string> = {
+  // 총괄 시나리오 A
+  diagnose_incident: "원인 진단", anomaly_detection: "이상 탐지", impact_analysis: "영향 분석",
+  rollback_deployment: "배포 되돌리기", verify_recovery: "복구 확인", restart_service: "서비스 다시 켜기",
+  find_related_prs: "관련 코드 변경 찾기", link_incident: "사건에 코드 변경 연결", verify_rollback_target: "되돌릴 배포 확인",
+  draft_notice: "공지 초안 작성", publish_notice: "공지 게시", get_notice: "공지 조회",
+  loss_aggregation: "손실 리포트", record_case: "사건 기록", check_plan: "예전 결정과 비교",
+  // 돈이 나가는 일·안전 관문
   issue_coupon: "쿠폰 지급", refund_request: "환불", confirm_settlement: "판매자 정산 확정",
-  seller_review: "판매자 입점 승인", settlement_hold: "판매자 정산 멈춤", publish_notice: "공지 올리기",
-  rollback_deployment: "배포 되돌리기", restart_service: "서비스 다시 켜기", generate_pr: "코드 변경 만들기",
-  record_case: "사건 기록", send_reply: "고객 답변 보내기",
+  seller_review: "판매자 입점 심사", settlement_hold: "판매자 정산 멈춤", hold_settlement: "판매자 정산 멈춤",
+  verify_amount: "금액 다시 계산", review_hold: "보류 건 1차 판단", review_threshold_change: "기준 변경 판단",
+  // 고객지원·기획개발·인사
+  send_reply: "고객 답변 보내기", request_compensation: "보상 요청", create_claim: "클레임 접수", decide_claim: "클레임 결정",
+  get_claim: "클레임 조회", receive_return: "반품 입고", inspect_return: "반품 검수", create_ticket: "변경 요청 접수",
+  generate_pr: "코드 변경 만들기", merge_pr: "코드 변경 합치기", confirm_spec: "기획서 확정",
+  start_handover: "인수인계 시작", answer_handover_question: "인수인계 질문 답변", decide_candidate_card: "후보 기록 결정",
 };
 export const actionKo = (a: string) => ACTION_KO[a] ?? a;
+/** 코드 이름 → 사람이 읽는 이름. 모르는 이름은 밑줄을 띄어 쓴다 */
+export const skillKo = (a: string | null | undefined) => (a ? ACTION_KO[a] ?? a.replace(/_/g, " ") : "");
+const GRADE_KO: Record<string, string> = { A: "A등급 · 바로 실행", B: "B등급 · 다른 부서가 확인 후 실행", C: "C등급 · 사람 승인" };
+export const gradeKo = (g: string | null | undefined) => (g && g !== "read" ? GRADE_KO[g] ?? `${g}등급` : "조회");
+/** 총괄 단계 이름 끝의 "(marketing)"·"(B)" 같은 영어 꼬리표를 뗀다 (말하는 쪽 이름에 이미 부서가 있다) */
+export const stepLabel = (label: string) => label.replace(/\s*\((?:[a-z-]+|[ABC])\)\s*/g, " ").replace(/\s+/g, " ").trim();
 
 const HOLD_WHY: Record<string, string> = {
   over_threshold: "금액 기준을 넘음", unregistered_action: "등록되지 않은 일", amount_mismatch: "적어 낸 금액과 계산이 다름",
@@ -100,10 +129,10 @@ export type Tone = "request" | "ok" | "warn" | "fail" | "muted";
 export interface Fact { label: string; value: string }
 
 export type ChatItem =
-  | { kind: "msg"; id: string; at: string; room: string; from: string; to: string; fromKey: string; central: boolean; text: string; tag?: string; tone: Tone; facts: Fact[] }
+  | { kind: "msg"; id: string; at: string; room: string; from: string; to: string; fromKey: string; central: boolean; text: string; tag?: string; raw?: string; tone: Tone; facts: Fact[] }
   | { kind: "system"; id: string; at: string; room: string; text: string }
   | { kind: "hold"; id: string; at: string; room: string; title: string; detail: string; state: "pending" | "approved" | "rejected" | "timeout"; contextId?: string; stepId?: string; link?: string }
-  | { kind: "separator"; id: string; at: string; room: string; text: string; variant: "day" | "topic" };
+  | { kind: "separator"; id: string; at: string; room: string; text: string; raw?: string; variant: "day" | "topic" };
 
 export const SAFETY_ROOM = "safety";
 /** 총괄 사건에 묶이지 않는 공통 로그 소통 (부서끼리 직접 주고받은 A2A) */
@@ -117,7 +146,19 @@ const FIELD_KO: Record<string, string> = {
   notice_id: "공지 id", eligible_customer_ids: "보상 대상", amount_per_customer: "1인 금액", issued: "지급", total_amount: "총액",
   failed_orders: "실패 주문", affected_customers: "영향 고객", lost_amount: "매출 손실", compensation_coupon_count: "보상 쿠폰",
   compensation_total: "보상 합계", total_loss: "총 손실", recovered: "복구", infra_metrics_ok: "지표 정상", card_id: "기록 id",
+  channel_code: "게시 위치", state: "상태", match: "금액 일치", pr_number: "코드 변경 번호", severity: "심각도", grade: "등급",
 };
+/** 코드 값 → 사람이 읽는 말 */
+const VALUE_KO: Record<string, string> = {
+  published: "게시됨", draft: "초안", banner: "쇼핑몰 배너", popup: "팝업", email: "메일", resolved: "해결됨", open: "진행 중",
+  pass: "통과", fail: "실패", approved: "승인", rejected: "거절", held: "보류", high: "높음", mid: "보통", low: "낮음",
+  suspected: "의심됨", confirmed: "확정", unknown: "확인할 수 없음", rolled_back: "되돌림", recovered: "복구됨", degraded: "일부 미완료",
+  completed: "완료", failed: "실패", skipped: "건너뜀", critical: "매우 높음",
+  // 구성요소
+  payment: "결제", api: "판매 사이트", db: "주문 DB", search: "검색", shipping: "배송",
+};
+/** id·번호는 사람에게 의미가 적어 말풍선에 넣지 않는다 (툴팁의 코드 정보로만) */
+const ID_KEY = /(^|_)id$|_ids$/;
 const MONEY = /amount|total|loss|_won$/;
 /** 부서가 쓴 자유 문장일 수 있는 키 — 절대 옮기지 않는다 */
 const UNSAFE_KEYS = new Set(["untrusted", "summary", "note", "message", "text", "reason", "explanation", "question", "body", "title", "description"]);
@@ -132,18 +173,18 @@ export function safeFacts(output: Record<string, unknown> | null | undefined): F
   const facts: Fact[] = [];
   for (const [key, value] of Object.entries(output)) {
     if (facts.length >= MAX_FACTS) break;
-    if (key.startsWith("_") || UNSAFE_KEYS.has(key)) continue;
+    if (key.startsWith("_") || UNSAFE_KEYS.has(key) || ID_KEY.test(key)) continue;
     const label = FIELD_KO[key] ?? key;
     if (typeof value === "number" && Number.isFinite(value)) {
       facts.push({ label, value: MONEY.test(key) ? `${fmtNum(value)}원` : fmtNum(value) });
     } else if (typeof value === "boolean") {
       facts.push({ label, value: value ? "예" : "아니오" });
     } else if (typeof value === "string" && SAFE_TOKEN.test(value)) {
-      facts.push({ label, value });
+      facts.push({ label, value: VALUE_KO[value] ?? value });
     } else if (Array.isArray(value)) {
       // 목록은 개수만. 단, 안전한 토큰 몇 개는 보여 준다 (PR 번호·버전 등)
       const tokens = value
-        .map((v) => (typeof v === "number" ? `#${v}` : typeof v === "string" && SAFE_TOKEN.test(v) ? v : pickToken(v)))
+        .map((v) => (typeof v === "number" ? `#${v}` : typeof v === "string" && SAFE_TOKEN.test(v) ? VALUE_KO[v] ?? v : pickToken(v)))
         .filter((v): v is string => !!v);
       const shown = value.length <= 3 && tokens.length === value.length ? tokens.join(", ") : `${fmtNum(value.length)}건`;
       facts.push({ label, value: shown });
@@ -181,7 +222,7 @@ function resultLine(step: OrchStep): { text: string; tone: Tone } {
   switch (step.status) {
     case "completed":
       if (step.transferred_to) return { text: `이관받아 처리 완료했습니다.`, tone: "ok" };
-      return { text: `${step.label} 완료했습니다.${retryTxt}`, tone: "ok" };
+      return { text: `${stepLabel(step.label)} 완료했습니다.${retryTxt}`, tone: "ok" };
     case "failed": {
       if (step.note.startsWith("canceled")) return { text: `시간 안에 끝내지 못했습니다 — 시간 초과${retryTxt}.`, tone: "fail" };
       if (step.note.startsWith("이관")) return { text: `소관이 아니라고 답했고, 이관할 부서를 찾지 못했습니다.`, tone: "fail" };
@@ -209,35 +250,35 @@ export function incidentItems(inc: OrchIncident): ChatItem[] {
   const room = inc.context_id;
   const out: ChatItem[] = [];
   const opened = inc.opened_at ?? inc.events[0]?.at ?? "";
-  out.push({ kind: "separator", id: `${room}:sep`, at: opened, room, text: `${incidentTitle(inc)} · ${inc.context_id}`, variant: "topic" });
+  out.push({ kind: "separator", id: `${room}:sep`, at: opened, room, text: `${incidentTitle(inc)}${opened ? ` · ${clockKo(opened)} 시작` : ""}`, raw: `사건 번호 ${inc.context_id}`, variant: "topic" });
   out.push({ kind: "system", id: `${room}:open`, at: opened, room, text: `판매 사이트에서 ${incidentTitle(inc)} 신호가 와서 사건이 열렸습니다.` });
 
   for (const step of inc.steps) {
     const sid = `${room}:${step.step_id}`;
     if (step.status === "skipped" && !step.dept) {
       const why = SKIP_WHY.find(([re]) => re.test(step.note))?.[1] ?? "건너뜀";
-      out.push({ kind: "system", id: `${sid}:skip`, at: step.finished_at ?? opened, room, text: `${step.label} — ${why}` });
+      out.push({ kind: "system", id: `${sid}:skip`, at: step.finished_at ?? opened, room, text: `${stepLabel(step.label)} — ${why}` });
       continue;
     }
     if (!step.started_at) continue;
     const original = step.transferred_to ? transferFrom(inc, step) ?? step.dept : step.dept;
     out.push({
       kind: "msg", id: `${sid}:req`, at: step.started_at, room, from: speaker(CENTRAL), to: speaker(original), fromKey: CENTRAL, central: true,
-      text: `${step.label} 요청합니다.`, tag: step.skill + (step.grade && step.grade !== "read" ? ` · ${step.grade}등급` : ""), tone: "request", facts: [],
+      text: `${stepLabel(step.label)} 요청합니다.`, tag: gradeKo(step.grade), raw: rawOf(`skill: ${step.skill}`), tone: "request", facts: [],
     });
     if (step.status === "skipped") {
       const why = SKIP_WHY.find(([re]) => re.test(step.note))?.[1] ?? "건너뜀";
-      out.push({ kind: "system", id: `${sid}:skip`, at: step.finished_at ?? step.started_at, room, text: `${step.label} — ${why}` });
+      out.push({ kind: "system", id: `${sid}:skip`, at: step.finished_at ?? step.started_at, room, text: `${stepLabel(step.label)} — ${why}` });
       continue;
     }
     if (step.transferred_to && original) {
       out.push({
         kind: "msg", id: `${sid}:transfer`, at: step.started_at, room, from: speaker(original), to: speaker(CENTRAL), fromKey: original, central: false,
-        text: `소관이 아닙니다. 이관 대상을 찾아 주세요.`, tag: step.reason_code ?? undefined, tone: "warn", facts: [],
+        text: `소관이 아닙니다. 이관 대상을 찾아 주세요.`, tag: "소관 아님", raw: rawOf(`skill: ${step.skill}`, step.reason_code), tone: "warn", facts: [],
       });
       out.push({
         kind: "msg", id: `${sid}:req2`, at: step.started_at, room, from: speaker(CENTRAL), to: speaker(step.transferred_to), fromKey: CENTRAL, central: true,
-        text: `${step.label} — ${speaker(original)}에서 이관합니다.`, tag: step.skill, tone: "request", facts: [],
+        text: `${stepLabel(step.label)} — ${speaker(original)}에서 이관합니다.`, tag: "이관", raw: rawOf(`skill: ${step.skill}`), tone: "request", facts: [],
       });
     }
     const wasHeld = step.reason_code === "human_input";
@@ -246,7 +287,7 @@ export function incidentItems(inc: OrchIncident): ChatItem[] {
       const holdAt = heldAt(inc, step) ?? step.started_at;
       out.push({
         kind: "msg", id: `${sid}:heldmsg`, at: holdAt, room, from: speaker(step.dept), to: speaker(CENTRAL), fromKey: step.dept ?? "", central: false,
-        text: `C 등급이라 사람 승인이 필요합니다.${step.note && SAFE_TOKEN.test(step.note) ? ` (${holdWhy(step.note)})` : ""}`, tag: step.skill, tone: "warn", facts: [],
+        text: `C 등급이라 사람 승인이 필요합니다.${step.note && SAFE_TOKEN.test(step.note) ? ` (${holdWhy(step.note)})` : ""}`, tag: gradeKo("C"), raw: rawOf(`skill: ${step.skill}`, step.note), tone: "warn", facts: [],
       });
       const state: "pending" | "approved" | "rejected" | "timeout" = pending
         ? "pending"
@@ -255,7 +296,7 @@ export function incidentItems(inc: OrchIncident): ChatItem[] {
           : "approved";
       out.push({
         kind: "hold", id: `${sid}:hold`, at: holdAt, room, contextId: inc.context_id, stepId: step.step_id, state,
-        title: step.label, detail: `${speaker(step.dept)} · ${step.skill}`,
+        title: stepLabel(step.label), detail: `${speaker(step.dept)} · ${skillKo(step.skill)}`,
       });
       if (pending) continue;
     }
@@ -264,7 +305,7 @@ export function incidentItems(inc: OrchIncident): ChatItem[] {
       const who = step.dept;
       out.push({
         kind: "msg", id: `${sid}:res`, at: step.finished_at, room, from: speaker(who), to: speaker(CENTRAL), fromKey: who ?? "", central: false,
-        text: r.text, tag: step.skill, tone: r.tone, facts: step.status === "completed" ? safeFacts(step.output) : [],
+        text: r.text, raw: rawOf(`skill: ${step.skill}`, ...idsOf(step.output)), tone: r.tone, facts: step.status === "completed" ? safeFacts(step.output) : [],
       });
     }
   }
@@ -296,7 +337,7 @@ export function incidentEventItems(inc: OrchIncident): ChatItem[] {
       if (e.message.startsWith("같은 사건에 합침")) {
         return { kind: "system" as const, id: `${inc.context_id}:ev${i}`, at: e.at ?? inc.opened_at ?? "", room: inc.context_id, text: "같은 장애 신호가 다시 들어와 진행 중인 이 사건에 합쳤습니다" };
       }
-      const label = e.message.split(": ")[0];
+      const label = stepLabel(e.message.split(": ")[0]);
       const retry = e.message.match(/(마감 초과|실패)\(?[^)]*\)?, 재시도 (\d+)$/);
       const text = retry
         ? `${label} — ${retry[1] === "마감 초과" ? "시간 초과" : "실패"}, ${retry[2]}번째 재시도`
@@ -314,7 +355,7 @@ export function executionItems(rec: ExecutionRecord): ChatItem[] {
   const amount = d.computed_amount != null ? ` (금액 ${fmtNum(d.computed_amount)}원)` : "";
   const out: ChatItem[] = [{
     kind: "msg", id: `${id}:req`, at: rec.created_at, room, from: speaker(req.requester), to: speaker("safety"), fromKey: req.requester, central: false,
-    text: `${actionKo(req.action)} 실행 요청${amount}`, tag: `${req.action} · ${req.context_id}`, tone: "request", facts: [],
+    text: `${actionKo(req.action)} 실행 요청${amount}`, tag: "안전 관문 기록", raw: rawOf(`action: ${req.action}`, req.context_id), tone: "request", facts: [],
   }];
   if (d.verifier) {
     const verdict =
@@ -325,7 +366,7 @@ export function executionItems(rec: ExecutionRecord): ChatItem[] {
       : { t: "검증 통과", tone: "ok" as Tone };
     out.push({
       kind: "msg", id: `${id}:verify`, at: rec.created_at, room, from: verifierName(d.verifier), to: speaker("safety"), fromKey: d.verifier, central: false,
-      text: verdict.t, tag: d.verifier === "finance" ? "verify_amount" : undefined, tone: verdict.tone, facts: [],
+      text: verdict.t, tag: d.verifier === "finance" ? "금액 다시 계산" : undefined, raw: d.verifier === "finance" ? "skill: verify_amount" : undefined, tone: verdict.tone, facts: [],
     });
   }
   const res: Record<string, { t: string; tone: Tone }> = {
@@ -338,7 +379,7 @@ export function executionItems(rec: ExecutionRecord): ChatItem[] {
   if (d.status === "executed" && d.grade === "C") r.t = "보류 후 결정을 받아 실행됨";
   out.push({
     kind: "msg", id: `${id}:res`, at: rec.created_at, room, from: speaker("safety"), to: speaker(req.requester), fromKey: "safety", central: true,
-    text: `${r.t} (${d.grade}등급)${why}`, tag: d.execution_id, tone: r.tone, facts: [],
+    text: `${r.t} (${d.grade}등급)${why}`, raw: rawOf(d.execution_id), tone: r.tone, facts: [],
   });
   if (d.status === "held") {
     out.push({
@@ -373,20 +414,17 @@ function coveredByIncident(line: CommLine, inc: OrchIncident | undefined): boole
  * `execution_id`가 안전 관문 기록과 같으면 `dupOf`에 그 id를 넣는다 — 전체 방에서는 빼고, 사건 방에서는 연결 표시만 단다.
  */
 export function commItem(line: CommLine, room: string, safetyIds: ReadonlySet<string>): Extract<ChatItem, { kind: "msg" }> & { dupOf?: string } {
-  const skill = line.skill ?? "skill 미기록";
+  const skill = line.skill ?? "무슨 일인지 기록 없음";
   const label = COMM_OUTCOME_KO[line.outcome] ?? line.outcome;
   const dupOf = line.execution_id && safetyIds.has(line.execution_id) ? line.execution_id : undefined;
-  const tag = [
-    skill, "공통 로그",
-    dupOf ? `안전 관문 방의 ${dupOf} 기록과 같은 건` : line.execution_id ?? null,
-    room === DIRECT_ROOM ? line.context_id : null,
-  ].filter(Boolean).join(" · ");
+  const tag = ["공통 로그 기록", dupOf ? "안전 관문 방에 같은 건이 있음" : null].filter(Boolean).join(" · ");
+  const raw = rawOf(line.skill ? `skill: ${line.skill}` : null, line.execution_id, line.context_id);
   const holdHint = line.outcome === "held" && !dupOf ? " — 안전 관문 보류 큐(/finance)에서 결정" : "";
   return {
     kind: "msg", id: `log:${line.log_id}`, at: line.occurred_at, room,
     from: speaker(line.from_agent), to: line.to_agent ? speaker(line.to_agent) : "받는 쪽 미기록",
     fromKey: line.from_agent, central: line.from_agent === CENTRAL,
-    text: `${actionKo(skill)}: ${label}${holdHint}`, tag, tone: COMM_TONE[line.outcome] ?? "muted", facts: [], dupOf,
+    text: `${line.skill ? skillKo(line.skill) : skill}: ${label}${holdHint}`, tag, raw, tone: COMM_TONE[line.outcome] ?? "muted", facts: [], dupOf,
   };
 }
 
