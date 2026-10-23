@@ -1,10 +1,12 @@
-// 기획개발팀 탭의 하위 화면 7개
-import { useEffect, useState, type Dispatch } from 'react'
-import {Button, Card, Notice, StatCard, useToast, type Column } from '@dejafix/common-frontend'
-import { AUTO_LEVELS, DEPT_NAME, PORTS, PROMOTE_AFTER, type Action, type Port, type PR, type Request, type State as S } from './data'
+// 기획개발팀 탭의 하위 화면. 요청·작업·운영·사후관리·교차검증은 프로젝트 탭과 같은 틀(왼쪽 목록 / 가운데 세로 흐름 / 오른쪽 곁 블록)을 쓴다
+import { useEffect, useState, type Dispatch, type ReactNode } from 'react'
+import { Button, Card, Notice, useToast, type Column } from '@dejafix/common-frontend'
+import { DEPT_NAME, IRREVERSIBLE, PORTS, TARGET_LABEL, TODAY, TRIAL_RUNS, activeRules, ruleText, type Action, type Activity as Act, type AuditItem, type AutoRule, type CrossReview, type Dept, type PR, type Request, type State as S } from './data'
 import { codeOf, traceOf, type CodeLine } from './trace'
 import { ActivityList, Dep, Grade, Lead, LinkTable, Point, Sec, State, Stats, rowNav, Tag } from './parts'
-import { Linked, Ref, convoHref, go, hrefOf, isFollowUp, nextOf, prFromSlug, prSlug, specOf } from './links'
+import { Linked, Ref, convoHref, go, hrefOf, isFollowUp, nextOf, prFromSlug, prSlug, reviewOf } from './links'
+import { CONFIRMED_BY, Flow, Head, Layout, ListPane, Pairs, Side, Step, mergedLabel, prStatus, specStatus } from './flow'
+import { doneLabel, gather } from './projects'
 import { SendWindow } from './depts'
 
 interface P { s: S; d: Dispatch<Action> }
@@ -13,61 +15,59 @@ interface P { s: S; d: Dispatch<Action> }
 export type RequestView = 'incoming' | 'progress' | 'done' | 'followup'
 // 후속 요청(isFollowUp) = 장애 뒤 재발 방지(link_incident)처럼 끝난 일에서 이어진 요청. 다른 세 화면에서는 뺀다
 export { isFollowUp }
-export const REQUEST_VIEWS: Record<RequestView, { title: string; sub: string; match: (r: Request) => boolean }> = {
-  incoming: { title: '들어온 요청', sub: '다른 부서가 보낸 변경 요청 중 아직 기획을 시작하지 않은 것. 같은 요청은 새로 만들지 않고 연결한다.', match: (r) => !isFollowUp(r) && r.state === '접수' },
-  progress: { title: '진행 중인 요청', sub: '기획서를 쓰고 있거나 작업·PR이 진행 중인 요청.', match: (r) => !isFollowUp(r) && (r.state === '기획 중' || r.state === '작업 중') },
-  done: { title: '해결된 요청', sub: '머지까지 끝나 요청 부서에 회신한 요청과, 같은 요청에 연결해 닫은 요청.', match: (r) => !isFollowUp(r) && (r.state === '완료' || r.state === '중복 연결') },
-  followup: { title: '후속 요청', sub: '장애가 난 뒤 재발 방지(link_incident)로 등록된 요청. 같은 사건이 다시 나면 새로 만들지 않고 연결한다.', match: isFollowUp },
+export const REQUEST_VIEWS: Record<RequestView, { title: string; match: (r: Request) => boolean }> = {
+  incoming: { title: '들어온 요청', match: (r) => !isFollowUp(r) && r.state === '접수' },
+  progress: { title: '진행 중인 요청', match: (r) => !isFollowUp(r) && (r.state === '기획 중' || r.state === '작업 중') },
+  done: { title: '해결된 요청', match: (r) => !isFollowUp(r) && (r.state === '완료' || r.state === '중복 연결') },
+  followup: { title: '후속 요청', match: isFollowUp },
 }
 
 export function Requests({ s, d, view, item }: P & { view: RequestView; item?: string }) {
+  const toast = useToast()
   const v = REQUEST_VIEWS[view]
   const rows = s.requests.filter(v.match)
-  const sel = rows.some((x) => x.id === item) ? item : rows[0]?.id
-  const r = s.requests.find((x) => x.id === sel)
-  const cols: Column<Request>[] = [
-    { key: 'id', header: '요청', render: (x) => <span className="mono">{x.id}</span> },
-    { key: 'from', header: '보낸 부서', render: (x) => <Dep d={x.from} /> },
-    { key: 'title', header: '내용' },
-    { key: 'next', header: '다음 할 일', render: (x) => <span className="next-hint">{nextOf(s, x).label} ›</span> },
-    { key: 'state', header: '상태', render: (x) => <><State v={x.state} />{x.auto?.ok && <> <Tag tone="green">자동 처리</Tag></>}</> },
-  ]
+  const r = rows.find((x) => x.id === item) ?? rows[0]
+  const list = <ListPane empty={`${v.title} 없음`} groups={[{ label: v.title, rows: rows.map((x) => ({ key: x.id, href: `#/requests/${view}/${x.id}`, on: x.id === r?.id, title: x.title, meta: <>{x.id} · {DEPT_NAME[x.from]} <State v={x.state} /></> })) }]} />
+  if (!r) return <Layout list={list}><div className="empty"><b>{v.title} 없음</b></div></Layout>
+  const g = gather(s, r)
+  const next = nextOf(s, r)
+  const draft = (r.state === '접수' || (r.state === '기획 중' && !g.spec))
   return (
-    <>
-      <Lead>{v.sub}</Lead>
-      <div className="split">
-        <Card as="section">
-          {rows.length ? <LinkTable columns={cols} rows={rows} rowKey={(x) => x.id} rowHref={(x) => nextOf(s, x).href} rowTitle="다음에 할 일로 이동" highlight={(x) => x.id === sel} /> : <div className="empty"><b>{v.title}이 없습니다</b><span>다른 부서가 변경 요청을 보내면 여기에 쌓입니다.</span></div>}
-        </Card>
-        {r && (
-          <Card title={`${r.id} ${r.title}`} sub={<a href={convoHref(r.ctx)} className="mono">{r.ctx} 에이전트 대화</a>} as="section">
-            <dl className="kv">
-              <dt>보낸 부서</dt><dd><Dep d={r.from} /> · <Point>{r.via}</Point></dd>
-              <dt>내용</dt><dd>{r.title}</dd>
-              <dt>근거</dt><dd><Linked s={s} text={r.evidence} /></dd>
-              <dt>중복 확인</dt><dd>{r.duplicateOf ? <>같은 요청 <Ref s={s} id={r.duplicateOf} />에 연결함 (규칙 확인)</> : '같은 요청 없음 (규칙 확인)'}</dd>
-              <dt>연결 문서</dt><dd>{specOf(s, r) ? <Ref s={s} id={specOf(s, r)!.id} /> : <span className="muted">아직 없음</span>}</dd>
-              <dt>상태</dt><dd><State v={r.state} /> <span className="muted">요청 부서는 get_request_status로 같은 상태를 본다</span></dd>
-              {r.auto && (
-                <>
-                  <dt>간단 요청</dt>
-                  <dd>
-                    <Tag tone={r.auto.ok ? 'green' : 'amber'}>{r.auto.ok ? '통과 · 사람 승인 없이 처리' : '해당 없음 · 팀장 확정'}</Tag>
-                    <ul className="flow" style={{ marginTop: 6, fontSize: 13 }}>{r.auto.reasons.map((x) => <li key={x}>{x}</li>)}</ul>
-                  </dd>
-                </>
-              )}
-            </dl>
+    <Layout
+      list={list}
+      head={<Head kicker={<>{r.id} · {DEPT_NAME[r.from]} · <Point>{r.via}</Point></>} title={r.title} side={<State v={r.state} />} />}
+      side={
+        <>
+          <Side title="다음">
             <div className="actions">
-              {r.state === '접수' && (r.from === 'hr' || r.from === 'data') && <Button variant="primary" onClick={() => d({ type: 'acceptDraft', request: r.id })}>채택하고 기획서 초안 만들기</Button>}
-              {r.state === '기획 중' && !specOf(s, r) && <Button variant="primary" onClick={() => { d({ type: 'writeSpec', request: r.id }); go('#/work/specs') }}>기획서 초안 만들기</Button>}
-              {r.state !== '접수' && !(r.state === '기획 중' && !specOf(s, r)) && <Button variant="primary" onClick={() => go(nextOf(s, r).href)}>{nextOf(s, r).label}</Button>}
-              {!nextOf(s, r).href.startsWith('#/projects/') && <Button onClick={() => go(`#/projects/${(s.requests.find((x) => x.id === r.duplicateOf) ?? r).id}`)}>프로젝트 전체 보기</Button>}
+              {draft && (r.from === 'hr' || r.from === 'data') && r.state === '접수'
+                ? <Button variant="primary" onClick={() => { d({ type: 'acceptDraft', request: r.id }); toast.show(`${r.id} 채택 · 기획서 초안`) }}>채택 · 기획서 초안</Button>
+                : draft
+                  ? <Button variant="primary" onClick={() => { d({ type: 'writeSpec', request: r.id }); toast.show(`${r.id} 기획서 초안`) }}>기획서 초안 만들기</Button>
+                  : <Button variant="primary" onClick={() => go(next.href)}>{next.label}</Button>}
+              <Button onClick={() => go(`#/projects/${r.duplicateOf ?? r.id}`)}>프로젝트</Button>
             </div>
-          </Card>
-        )}
-      </div>
-    </>
+          </Side>
+          <Side title="근거"><p className="pside-msg"><Linked s={s} text={r.evidence} /></p></Side>
+          <Side title="같은 요청" sum={r.duplicateOf ? undefined : `${g.dups.length}건`}>
+            {r.duplicateOf && <p className="pside-msg">원본 <Ref s={s} id={r.duplicateOf} /></p>}
+            {g.dups.map((x) => <p key={x.id} className="pside-msg"><Ref s={s} id={x.id} /> · {DEPT_NAME[x.from]}</p>)}
+          </Side>
+          {r.auto && (
+            <Side title="간단 요청" sum={r.auto.ok ? '해당' : '해당 없음'}>
+              {r.auto.reasons.map((x) => <p key={x} className="pside-msg">{x}</p>)}
+            </Side>
+          )}
+        </>
+      }
+    >
+      <Flow>
+        <Step name="접수" on href={convoHref(r.ctx)} title={DEPT_NAME[r.from]}><p className="muted mono">{r.ctx}</p></Step>
+        <Step name="기획서" on={!!g.spec} href={g.spec ? `#/work/specs/${g.spec.id}` : undefined} title={g.spec ? `${g.spec.id} · ${specStatus(s, g.spec)}` : '없음'} />
+        <Step name="작업" on={g.tasks.length > 0} href={g.prs[0] ? `#/work/prs/${prSlug(g.prs[0].id)}` : undefined} title={g.tasks.length ? `작업 ${g.tasks.length} · ${g.prs.length ? prStatus(s, g.prs) : 'PR 없음'}` : '없음'} />
+        <Step name="처리" on={r.state === '완료'} href={g.incidents[0] ? hrefOf(s, g.incidents[0].ctx) : r.state === '완료' ? `#/projects/${r.id}` : undefined} title={doneLabel(r, g)} />
+      </Flow>
+    </Layout>
   )
 }
 
@@ -84,6 +84,8 @@ export function Specs({ s, d, item, item2 }: P & { item?: string; item2?: string
   const thread = s.threads.find((t) => t.on === spec.id)
   const inc = s.incidents.find((i) => i.candidates.some((c) => c.spec === spec.id && c.para === para.id))
   const canGenerate = spec.status === '확정' && s.tasks.some((t) => t.spec === spec.id && t.state === '진행 중')
+  const xr = reviewOf(s, spec.id)
+  const answer = spec.id === 'SPEC-7' ? '재고가 없어진 상품은 남기되 품절로 표시해 주세요.' : '화면 문구만 바꿔 주세요.'
 
   return (
     <div className="three">
@@ -109,19 +111,24 @@ export function Specs({ s, d, item, item2 }: P & { item?: string; item2?: string
       <section className="col-doc">
         <div className="doc-head">
           <h1 className="page-title" style={{ margin: 0 }}>{spec.title}</h1>
-          <State v={spec.status} />
-          {spec.auto && <Tag tone="green">자동 처리 · 사람 승인 없음</Tag>}
+          <State v={xr ? (xr.lane === 'human' ? '사람 확인 대기' : '교차검증 대기') : spec.status} />
+          {spec.confirmedBy && <Tag>{CONFIRMED_BY[spec.confirmedBy]}</Tag>}
           <span style={{ flex: 1 }} />
-          {spec.status === '초안' ? (
-            <Button variant="primary" onClick={() => { d({ type: 'confirmSpec', spec: spec.id }); toast.show(`${spec.id} 확정 → 작업 분할, 인사에 spec_confirmed 전송`) }}>기획서 확정 (팀장)</Button>
-          ) : canGenerate ? (
-            <Button variant="dark" icon="sparkle" onClick={() => { d({ type: 'generatePrs', spec: spec.id }); toast.show('generate_pr 실행 → 안전 레이어 규칙 검증 → PR 생성') }}>시연: 에이전트가 PR 생성</Button>
-          ) : null}
+          {canGenerate && (
+            <Button variant="dark" icon="sparkle" onClick={() => { d({ type: 'generatePrs', spec: spec.id }); toast.show('generate_pr 실행 → 안전 레이어 규칙 검증 → PR 생성 → 기준 안이면 자동 머지') }}>시연: 에이전트가 PR 생성</Button>
+          )}
         </div>
         <p className="muted small">
           요청 <Ref s={s} id={spec.request} /> · <a href={`#/projects/${spec.request}`}>프로젝트 보기</a> · 에이전트가 작성, 사람이 쓴 문장 {spec.humanSentences}개
         </p>
-        {spec.status === '초안' && spec.question && <Notice tone="warn">빈 항목 질문이 남아 있습니다. 확정 전에 스레드에서 답을 받는 것을 권합니다.</Notice>}
+        {spec.status === '초안' && !xr && spec.question && <Notice tone="warn">빈 항목 질문이 남아 있습니다. 답이 오면 AI가 확정 조건(질문 없음·인사 경고 없음·근거 있음)을 다시 보고, 맞으면 바로 확정하고 아니면 AI 교차검증에 올립니다.</Notice>}
+        {xr && (
+          <Notice tone="warn">
+            {xr.lane === 'human'
+              ? <>되돌릴 수 없는 일({xr.irreversible})이라 AI가 정하지 않습니다. <a href={`#/work/reviews/${xr.id}`}>사람 확인 대기열 {xr.id}</a>에서 팀장이 확인합니다.</>
+              : <>자동 확정 조건에 맞지 않아({xr.routeWhy.join(', ')}) <a href={`#/work/reviews/${xr.id}`}>AI 교차검증 {xr.id}</a>에 올라가 있습니다. 판단은 {xr.verifier}가 합니다.</>}
+          </Notice>
+        )}
         <h3 className="sec">문제</h3><p>{spec.problem}</p>
         <h3 className="sec">목표</h3><p>{spec.goal}</p>
         <h3 className="sec">요구사항</h3>
@@ -131,7 +138,7 @@ export function Specs({ s, d, item, item2 }: P & { item?: string; item2?: string
         {spec.question && (
           <div className="question">
             질문 · {spec.question}
-            <Button size="small" onClick={() => d({ type: 'answerQuestion', spec: spec.id, text: '재고가 없어진 상품은 남기되 품절로 표시해 주세요.' })}>시연: 고객지원이 스레드에 답함</Button>
+            <Button size="small" onClick={() => { d({ type: 'answerQuestion', spec: spec.id, text: answer }); toast.show('답을 받아 확정 조건을 다시 확인합니다') }}>시연: 요청 부서가 스레드에 답함</Button>
           </div>
         )}
         <h3 className="sec">근거</h3>
@@ -141,10 +148,10 @@ export function Specs({ s, d, item, item2 }: P & { item?: string; item2?: string
       <aside className="col-right">
         <div className="ph">선택한 문단 {para.id}에 연결된 것</div>
         <Sec title="작업" sub={`${tasks.length}건`}>
-          {tasks.length ? tasks.map((t) => <div key={t.id} {...rowNav(hrefOf(s, t.id), '이 작업의 PR 보기')}><div className="mini-row"><span className="mono">{t.id}</span> {t.title} <State v={t.state} /></div></div>) : <span className="muted">기획서를 확정하면 split_tasks가 나눈다</span>}
+          {tasks.length ? tasks.map((t) => <div key={t.id} {...rowNav(hrefOf(s, t.id), '이 작업의 PR 보기')}><div className="mini-row"><span className="mono">{t.id}</span> {t.title} <State v={t.state} /></div></div>) : <span className="muted">기획서가 확정되면 split_tasks가 나눈다</span>}
         </Sec>
         <Sec title="PR" sub="작업 1개 = PR 1개">
-          {prs.length ? prs.map((p) => <PrLine key={p.id} p={p} d={d} />) : <span className="muted">아직 없음</span>}
+          {prs.length ? prs.map((p) => <PrLine key={p.id} s={s} p={p} d={d} />) : <span className="muted">아직 없음</span>}
         </Sec>
         <Sec title="스레드 · 결정" sub={thread ? <a href={`#/talk/${thread.id}`}>스레드 전체 보기</a> : undefined}>
           {thread?.messages.slice(-2).map((m, i) => <div key={i} className="msg"><b>{m.who}</b> <Linked s={s} text={m.text} />{m.decision && <> <Tag tone="green">{m.decision}</Tag></>}</div>)}
@@ -180,94 +187,89 @@ function ParaBox({ p, on, onClick, s, spec }: { p: S['specs'][number]['paras'][n
   )
 }
 
-function PrLine({ p, d, onTrace }: { p: PR; d: Dispatch<Action>; onTrace?: () => void }) {
+// PR 한 줄 (기획서 옆 칸). 머지 버튼은 없다: 기준 안이면 자동 머지, 밖이면 교차검증, 되돌릴 수 없는 일이면 사람 확인
+function PrLine({ s, p, d }: { s: S; p: PR; d: Dispatch<Action> }) {
   const last = p.reviews[p.reviews.length - 1]
+  const xr = reviewOf(s, p.id)
+  const rejected = !p.merged && !xr && s.reviews.some((x) => x.ref === p.id && x.result === '거절')
   return (
     <div className="pr-line">
       <div><a href={`#/work/prs/${prSlug(p.id)}`}><b>{p.id}</b> {p.title}</a></div>
-      <div className="muted small mono">{p.branch} · generated-pr{p.auto ? ' · 자동 머지' : ''}</div>
+      <div className="muted small mono">{p.gate.lines}줄·{p.gate.files}파일 · {p.gate.paths}</div>
       <span className="tags">
         <Tag tone={last === '통과' ? 'green' : 'amber'}>검수 {last}{p.reviews.length > 1 ? ` (${p.reviews.length}회차)` : ''}</Tag>
-        <Tag>execute() {p.gate.result}</Tag>
-        {p.merged && <Tag tone="green">머지됨</Tag>}
+        {p.merged ? <Tag tone="green">{mergedLabel(p)}</Tag> : xr ? <a href={`#/work/reviews/${xr.id}`}><Tag tone="amber">{xr.lane === 'human' ? '사람 확인 대기' : '교차검증 대기'} {xr.id}</Tag></a> : rejected ? <Tag tone="amber">검증자 거절</Tag> : null}
       </span>
-      {!p.merged && last === '불일치' && <Button size="small" onClick={() => d({ type: 'reviewPr', pr: p.id })}>시연: 수정 커밋 후 재검수</Button>}
-      {!p.merged && last === '통과' && <Button size="small" variant="primary" onClick={() => d({ type: 'mergePr', pr: p.id })}>PR 머지 (팀장)</Button>}
-      {onTrace && <button type="button" className="linkish small" onClick={onTrace}>이 코드 왜 이렇게 했지?</button>}
+      {!p.merged && (last === '불일치' || rejected) && <Button size="small" onClick={() => d({ type: 'reviewPr', pr: p.id })}>시연: 수정 후 재검수</Button>}
     </div>
   )
 }
 
-// ---------------------------------------------------------------- 작업·PR
+// ---------------------------------------------------------------- 작업·PR (왼쪽 작업 목록 / 가운데 PR 흐름 / 오른쪽 근거 체인)
+const waitLabel = (x: CrossReview) => (x.lane === 'human' ? '사람 확인 대기' : '교차검증 대기')
 export function Work({ s, d, item }: P & { item?: string }) {
-  const cols = ['진행 중', 'PR 검수', '머지 대기', '완료'] as const
-  const prId = s.prs.find((p) => p.id === prFromSlug(item))?.id ?? s.prs[0]?.id ?? ''
   const [line, setLine] = useState<CodeLine>()
-  const [allDone, setAllDone] = useState(false)
-  const sel = { pr: prId, line }
-  const setSel = (x: { pr: string; line?: CodeLine }) => { setLine(x.line); if (x.pr !== prId) go(`#/work/prs/${prSlug(x.pr)}`) }
-  useEffect(() => {
-    setLine(undefined)
-    if (item) document.getElementById('trace')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }, [item])
+  useEffect(() => setLine(undefined), [item])
+  const prOf = (taskId: string) => s.prs.find((p) => p.task === taskId)
+  const sel = s.prs.find((p) => p.id === prFromSlug(item)) ?? s.prs.find((p) => reviewOf(s, p.id)) ?? s.prs[s.prs.length - 1]
+  const groupOf = (taskId: string, state: string) => { const p = prOf(taskId); return state === '완료' || p?.merged ? 2 : p && reviewOf(s, p.id) ? 1 : 0 }
+  const tasks = s.tasks.slice().reverse()
+  const row = (t: S['tasks'][number]) => {
+    const p = prOf(t.id)
+    const xr = p && reviewOf(s, p.id)
+    return { key: t.id, href: p ? `#/work/prs/${prSlug(p.id)}` : `#/work/specs/${t.spec}/${t.para}`, on: !!p && p.id === sel?.id, title: t.title, meta: <>{t.id}{p ? ` · ${p.id}` : ''} <State v={xr ? waitLabel(xr) : t.state} /></> }
+  }
+  const list = <ListPane empty="작업 없음" groups={(['진행 중', '교차검증·사람 확인', '완료'] as const).map((label, i) => ({ label, rows: tasks.filter((t) => groupOf(t.id, t.state) === i).map(row) }))} />
+  if (!sel) return <Layout list={list}><div className="empty"><b>PR 없음</b></div></Layout>
+  const task = s.tasks.find((t) => t.id === sel.task)
+  const spec = s.specs.find((x) => x.id === task?.spec)
+  const para = spec?.paras.find((p) => p.id === task?.para)
+  const xr = reviewOf(s, sel.id)
+  const last = sel.reviews[sel.reviews.length - 1]
+  const rejected = !sel.merged && !xr && s.reviews.some((x) => x.ref === sel.id && x.result === '거절')
+  const chain = traceOf(s, sel.id).filter((x) => x.kind !== '코드' && x.kind !== 'PR')
   return (
-    <>
-      <Lead>작업 1개 = PR 1개. PR은 안전 레이어 코드 규칙(변경 줄 수·파일 수·허용 경로)을 통과해야 열리고, 머지는 사람이 한다. 간단 요청 규칙을 통과한 것만 자동 머지.</Lead>
-      <div className="kanban">
-        {cols.map((c) => {
-          const all = s.tasks.filter((t) => t.state === c)
-          // 완료 칸은 최근 3개만 펼치고 나머지는 접는다
-          const tasks = c === '완료' && !allDone ? all.slice(-3).reverse() : c === '완료' ? all.slice().reverse() : all
-          return (
-            <section key={c} className="kcol">
-              <div className="kcol-h">{c} <span className="muted">{all.length}</span></div>
-              {tasks.map((t) => {
-                const pr = s.prs.find((p) => p.task === t.id)
-                const last = pr?.reviews[pr.reviews.length - 1]
-                const nav = rowNav(pr ? `#/work/prs/${prSlug(pr.id)}` : `#/work/specs/${t.spec}/${t.para}`, pr ? 'PR과 코드 역추적 보기' : '기획서 문단 보기')
-                return (
-                  <div key={t.id} {...nav} className={`kcard${pr?.id === prId ? ' on' : ''}${nav.className ? ` ${nav.className}` : ''}`}>
-                    <div className="kcard-title">{t.title}</div>
-                    <div className="kcard-meta"><span className="mono">{t.id}</span> · {t.spec} {t.para}{pr && <> · {pr.id}{pr.auto ? ' · 자동' : ''}</>}</div>
-                    {pr && !pr.merged && last === '불일치' && <div className="kcard-act"><Tag tone="amber">검수 불일치</Tag><Button size="small" onClick={() => d({ type: 'reviewPr', pr: pr.id })}>수정 후 재검수</Button></div>}
-                    {pr && !pr.merged && last === '통과' && <div className="kcard-act"><Tag tone="green">검수 통과</Tag><Button size="small" variant="primary" onClick={() => d({ type: 'mergePr', pr: pr.id })}>머지</Button></div>}
-                  </div>
-                )
-              })}
-              {c === '완료' && all.length > 3 && <button type="button" className="linkish small" onClick={() => setAllDone((v) => !v)}>{allDone ? '접기' : `${all.length - 3}개 더 보기`}</button>}
-              {!all.length && <div className="muted small">비어 있음</div>}
-            </section>
-          )
-        })}
-      </div>
-      <Trace s={s} sel={sel} setSel={setSel} />
-      <Notice icon="bell">기준을 넘는 PR(C 등급)은 여기에 보류 목록을 따로 두지 않고, 대시보드의 공통 C 보류 큐에 올라가 담당자가 승인·거절한다 (24시간 미처리 시 자동 거절).</Notice>
-    </>
+    <Layout
+      list={list}
+      head={<Head kicker={<>{sel.id} · {task?.id} · <span className="mono">{sel.branch}</span></>} title={sel.title.replace(/^[A-Z]\d+: /, '')} side={<State v={sel.merged ? '완료' : xr ? waitLabel(xr) : last === '불일치' || rejected ? '불일치' : '머지 대기'} />} />}
+      side={
+        <Side title="근거 체인" sum={`${chain.length}단계`}>
+          {chain.map((x, i) => <p key={i} className="pside-msg"><b>{x.kind}</b> {x.href ? <a href={x.kind === '문단' && spec && para ? `#/work/specs/${spec.id}/${para.id}` : x.href} className="plain-link">{x.title}</a> : x.title}</p>)}
+        </Side>
+      }
+      below={<Trace s={s} pr={sel} line={line} setLine={setLine} />}
+    >
+      <Flow>
+        <Step name="작업" on href={task ? `#/work/specs/${task.spec}/${task.para}` : undefined} title={task ? `${task.id} · ${task.spec} ${task.para}` : '-'}>
+          {para && <p>{para.text}</p>}
+          {para?.warn && <Tag tone="amber">경고 {para.warn.card}</Tag>}
+          {para?.incident && <Tag tone="amber">장애 {para.incident}</Tag>}
+        </Step>
+        <Step name="관문" on title={`${sel.gate.result} · ${sel.gate.lines}줄·${sel.gate.files}파일 · ${sel.gate.paths}`} />
+        <Step name="검수" on={last === '통과'} title={sel.reviews.join(' → ')}>
+          {!sel.merged && (last === '불일치' || rejected) && <Button size="small" onClick={() => d({ type: 'reviewPr', pr: sel.id })}>시연: 수정 후 재검수</Button>}
+        </Step>
+        <Step name="머지" on={sel.merged} href={xr ? `#/work/reviews/${xr.id}` : undefined} title={sel.merged ? mergedLabel(sel) : xr ? `${waitLabel(xr)} · ${xr.id}` : rejected ? '검증자 거절' : '머지 전'}>
+          {xr && <p className="muted">{xr.verifier}</p>}
+        </Step>
+      </Flow>
+    </Layout>
   )
 }
 
-// ---------------------------------------------------------------- 코드 역추적 (코드 줄 → PR → 작업 → 문단 → 결정 → 요청 → 근거)
-function Trace({ s, sel, setSel }: { s: S; sel: { pr: string; line?: CodeLine }; setSel: (x: { pr: string; line?: CodeLine }) => void }) {
-  const pr = s.prs.find((p) => p.id === sel.pr)
-  if (!pr) return null
+// 코드 역추적 (코드 줄 → PR → 작업 → 문단 → 결정 → 요청 → 근거). 연결은 문단 id로만 따라간다
+function Trace({ s, pr, line: picked, setLine }: { s: S; pr: PR; line?: CodeLine; setLine: (x?: CodeLine) => void }) {
   const lines = codeOf(s, pr)
-  const line = sel.line ?? lines[0]
+  const line = picked ?? lines[0]
   const steps = traceOf(s, pr.id, line)
   return (
-    <div id="trace"><Card as="section" title="코드 역추적" sub="코드 한 줄에서 PR·작업·기획서 문단·결정·원래 요청·근거까지 문단 id로 거슬러 올라간다. 연결은 코드 규칙으로만 따라가고 판정 문장은 만들지 않는다.">
+    <section id="trace" className="flow-sec">
+      <h2>코드 역추적</h2>
       <div className="trace">
         <div className="trace-code">
-          <div className="trace-h">PR</div>
-          <div className="trace-prs">
-            {s.prs.map((p) => (
-              <button key={p.id} type="button" className={p.id === pr.id ? 'on' : ''} onClick={() => setSel({ pr: p.id })}>
-                {p.id}{p.auto ? ' · 자동' : ''}
-              </button>
-            ))}
-          </div>
-          <div className="trace-h">바뀐 줄 (눌러서 추적)</div>
+          <div className="trace-h">바뀐 줄</div>
           {lines.map((l) => (
-            <button key={`${l.path}:${l.line}`} type="button" className={`code-line${l.line === line.line && l.path === line.path ? ' on' : ''}`} onClick={() => setSel({ pr: pr.id, line: l })}>
+            <button key={`${l.path}:${l.line}`} type="button" className={`code-line${l.line === line.line && l.path === line.path ? ' on' : ''}`} onClick={() => setLine(l)}>
               <span className="muted small mono">{l.path}:{l.line}</span>
               <code>{l.text}</code>
             </button>
@@ -285,205 +287,354 @@ function Trace({ s, sel, setSel }: { s: S; sel: { pr: string; line?: CodeLine };
           ))}
         </ol>
       </div>
-    </Card></div>
+    </section>
   )
 }
 
-// ---------------------------------------------------------------- 자동 처리 범위 (간단 요청 자동 머지의 신뢰 이력)
-export function Autonomy({ s, d }: P) {
+// ---------------------------------------------------------------- AI 교차검증 대기열 + 사람 확인 (되돌릴 수 없는 일)
+export function Reviews({ s, d, item }: P & { item?: string }) {
+  const toast = useToast()
+  const all = s.reviews.slice().reverse()
+  const r = s.reviews.find((x) => x.id === item) ?? all.find((x) => !x.result) ?? all[0]
+  const row = (x: CrossReview) => ({ key: x.id, href: `#/work/reviews/${x.id}`, on: x.id === r?.id, title: `${TARGET_LABEL[x.target]} · ${x.title}`, meta: <>{x.id} · {x.ref} <State v={x.result ?? waitLabel(x)} /></> })
+  const list = <ListPane empty="대기 없음" groups={[
+    { label: '교차검증 대기', rows: all.filter((x) => !x.result && x.lane === 'ai').map(row) },
+    { label: '사람 확인 대기', rows: all.filter((x) => !x.result && x.lane === 'human').map(row) },
+    { label: '끝남', rows: all.filter((x) => x.result).map(row) },
+  ]} />
+  if (!r) return <Layout list={list}><div className="empty"><b>대기 없음</b></div></Layout>
+  const cnt = (k: CrossReview['checks'][number]['result']) => r.checks.filter((c) => c.result === k).length
+  return (
+    <Layout
+      list={list}
+      head={<Head kicker={<>{r.id} · {TARGET_LABEL[r.target]} · <Ref s={s} id={r.ref} /> · {r.t}</>} title={r.title} side={<State v={r.result ?? waitLabel(r)} />} />}
+      side={
+        <>
+          <Side title="판단">
+            <Pairs items={[
+              ['검증자', r.verifier],
+              ['자기 승인', r.lane === 'ai' ? '아님 · 기획개발 밖' : '해당 없음'],
+              ...(r.irreversible ? [['되돌릴 수 없음', r.irreversible] as [string, string]] : []),
+            ]} />
+            {!r.result && (
+              <div className="actions">
+                {r.lane === 'ai'
+                  ? <Button variant="dark" icon="sparkle" onClick={() => { d({ type: 'decideReview', review: r.id }); toast.show(`${r.verifier} 판단 반영`) }}>시연: 검증자 판단 받기</Button>
+                  : <>
+                      <Button variant="primary" onClick={() => { d({ type: 'humanDecide', review: r.id, ok: true }); toast.show(`${r.ref} 진행`) }}>확인하고 진행</Button>
+                      <Button onClick={() => { d({ type: 'humanDecide', review: r.id, ok: false }); toast.show(`${r.ref} 보류`) }}>보류</Button>
+                    </>}
+              </div>
+            )}
+          </Side>
+          <Side title="대화" href={convoHref(r.ctx)} sum={<span className="mono">{r.ctx}</span>} />
+        </>
+      }
+    >
+      <Flow>
+        <Step name="이유" on title={r.routeWhy.join(', ') || '-'} />
+        <Step name="AI 정리" on title={r.recommend ? `추천 ${r.recommend}` : '추천 없음'}>
+          <p><Linked s={s} text={r.summary} /></p>
+          {r.recommendWhy && <p className="muted">{r.recommendWhy}</p>}
+        </Step>
+        <Step name="규칙" on title={`통과 ${cnt('통과')} · 확인 필요 ${cnt('확인 필요')} · 걸림 ${cnt('걸림')}`}>
+          <ul>{r.checks.map((c) => <li key={c.label}><State v={c.result} /> <b>{c.label}</b> <span className="muted"><Linked s={s} text={c.detail} /></span></li>)}</ul>
+        </Step>
+        <Step name="판단" on={!!r.result} title={r.result ? `${r.result} · ${r.decidedAt}` : '대기'}>
+          {r.resultWhy && <p className="muted">{r.resultWhy}</p>}
+        </Step>
+        {r.target === 'merge_pr' && r.lane === 'ai' && (
+          <Step name="학습" on={!!r.learned?.rule} href={r.learned?.rule ? hrefOf(s, r.learned.rule) : undefined} title={!r.learned ? '-' : r.learned.rule ? `${r.learned.rule} 등록 · 시험 중` : '학습 거부'}>
+            {r.learned && (
+              <Pairs items={[
+                ['제안', r.learned.proposal],
+                ...(r.learned.backtest ? [['백테스트', `과거 ${r.learned.backtest.checked} · 해당 ${r.learned.backtest.covered} · 충돌 ${r.learned.backtest.conflicts.length}`] as [string, string]] : []),
+                ...(r.learned.refused ? [['거부', <Linked key="x" s={s} text={r.learned.refused} />] as [string, ReactNode]] : []),
+              ]} />
+            )}
+          </Step>
+        )}
+      </Flow>
+    </Layout>
+  )
+}
+
+// ---------------------------------------------------------------- 자동 처리 범위 (학습된 기준: 한 번 학습 → 백테스트 → 시험 중 → 정식)
+export function Autonomy({ s, d, item }: P & { item?: string }) {
   const toast = useToast()
   const pol = s.autoPolicy
-  const cur = AUTO_LEVELS[pol.level]
+  const by = (st: AutoRule['status']) => pol.rules.filter((r) => r.status === st).length
   const linked = pol.history.filter((h) => h.result === '장애 연결').length
-  const proposal = pol.proposal
+  const off = (r: AutoRule) => { d({ type: 'disableRule', rule: r.id }); toast.show(`${r.id} 해제 · 이 범위는 다시 교차검증으로`) }
+  const cols: Column<AutoRule>[] = [
+    { key: 'id', header: '기준', render: (r) => <span className="mono">{r.id}</span> },
+    { key: 'what', header: '내용', render: (r) => <>{TARGET_LABEL[r.action]} · {ruleText(r)}</> },
+    { key: 'status', header: '상태', render: (r) => <><State v={r.status} />{r.status === '시험 중' && <span className="muted small"> {r.runs.filter((x) => x.result === '정상').length}/{TRIAL_RUNS}건 정상</span>}</> },
+    { key: 'basis', header: '근거 건', render: (r) => <><Ref s={s} id={r.basis} />{r.review && <> · <Ref s={s} id={r.review} /></>}</> },
+    { key: 'bt', header: '백테스트', render: (r) => <span className="small">과거 {r.backtest.checked}건 대조 · 기준에 드는 {r.backtest.covered}건 · 충돌 {r.backtest.conflicts.length}건</span> },
+    { key: 't', header: '만든 시각', render: (r) => <span className="mono small">{r.t}</span> },
+    { key: 'off', header: '', render: (r) => r.status === '해제됨' ? <span className="muted small">{r.offWhy}</span> : <Button size="small" onClick={() => off(r)}>기준 끄기</Button> },
+  ]
   return (
     <>
-      <Lead>간단 요청 자동 머지가 정상으로 쌓이면 범위를 넓히자고 제안하고 승인은 팀장이 한다. 자동 머지한 PR이 장애에 연결되면 승인 없이 바로 한 단계 줄인다. 단계·기준값은 시연값이다.</Lead>
+      <Lead>교차검증 승인 1건 → 기준 제안 → 백테스트 → 시험 중(처음 {TRIAL_RUNS}건 단계적 배포) → 정식. 장애 연결·사람이 끄면 해제.</Lead>
       <Stats items={[
-        { label: '현재 단계', value: `L${pol.level}`, hint: cur.name },
-        { label: '자동 처리 기준', value: pol.level ? `${cur.lines}줄 · ${cur.files}파일` : '중지', hint: `허용 경로 ${pol.paths}` },
-        { label: '연속 정상', value: `${pol.streak} / ${PROMOTE_AFTER}`, hint: '마지막 단계 변경 뒤' },
-        { label: '자동 머지 / 장애 연결', value: `${pol.history.length} / ${linked}`, hint: '건' },
+        { label: '정식 기준', value: by('정식') },
+        { label: '시험 중', value: by('시험 중'), hint: `처음 ${TRIAL_RUNS}건 단계적 배포` },
+        { label: '해제됨', value: by('해제됨') },
+        { label: '기준으로 자동 머지 / 장애 연결', value: `${pol.history.length} / ${linked}`, hint: '건' },
       ]} />
-      {proposal && (
-        <Notice icon="sparkle">
-          <b>L{pol.level} → L{proposal.to} 승급 제안</b> · {proposal.why}. 승인하면 간단 요청 기준이 {AUTO_LEVELS[proposal.to].lines}줄·{AUTO_LEVELS[proposal.to].files}파일로 넓어진다.{' '}
-          <Button size="small" variant="primary" onClick={() => { d({ type: 'approvePromotion' }); toast.show(`L${proposal.to}로 승급`) }}>승급 승인 (팀장)</Button>{' '}
-          <Button size="small" onClick={() => d({ type: 'rejectPromotion' })}>보류</Button>
-        </Notice>
-      )}
+      <Card as="section" title="학습된 기준" sub="이 범위 안의 PR은 검수 통과 뒤 사람 클릭 없이 머지된다">
+        <LinkTable columns={cols} rows={pol.rules.slice().reverse()} rowKey={(r) => r.id} rowHref={(r) => hrefOf(s, r.review ?? r.basis)} rowTitle="이 기준을 배운 건 보기" highlight={(r) => r.id === item} />
+      </Card>
       <div className="auto-grid">
-        <Card as="section" title="단계" sub="넓히기 = 사람 승인, 줄이기 = 자동">
+        <Card as="section" title="되돌릴 수 없는 일" sub="교차검증 대신 항상 사람이 확인한다">
           <ul className="levels">
-            {AUTO_LEVELS.map((l) => (
-              <li key={l.level} className={l.level === pol.level ? 'on' : ''}>
-                <b>L{l.level}</b> {l.name} <span className="muted small">{l.level ? `${l.lines}줄·${l.files}파일 이하` : '모든 요청 사람 확정'}</span>
-              </li>
-            ))}
+            {IRREVERSIBLE.map((x) => <li key={x.id}><b>{x.label}</b> <span className="muted small">{x.words.join(', ')}</span></li>)}
           </ul>
         </Card>
-        <Card as="section" title="변경 기록" sub="누가(사람·자동) 언제 바꿨나">
+        <Card as="section" title="변경 기록" sub="누가(자동·교차검증·사람) 언제 바꿨나">
           <ul className="levels">
             {pol.log.slice().reverse().map((x, i) => (
-              <li key={i}><Tag tone={x.by === '사람' ? 'neutral' : 'amber'}>{x.by}</Tag> <span className="muted small mono">{x.t}</span> {x.text}</li>
+              <li key={i}><Tag tone={x.by === '자동' ? 'amber' : undefined}>{x.by}</Tag> <span className="muted small mono">{x.t}</span> <Linked s={s} text={x.text} /></li>
             ))}
           </ul>
         </Card>
       </div>
-      <Card as="section" title="자동 처리 이력" sub="간단 요청 규칙으로 자동 머지한 PR과 그 뒤 결과">
+      <Card as="section" title="기준으로 자동 머지한 이력" sub="학습된 기준으로 자동 머지한 PR과 그 뒤 결과">
         {pol.history.length ? (
-          <table className="auto-table">
-            <thead><tr><th>시각</th><th>PR</th><th>요청</th><th>변경</th><th>결과</th></tr></thead>
-            <tbody>
-              {pol.history.slice().reverse().map((h) => (
-                <tr key={h.pr} {...rowNav(`#/work/prs/${prSlug(h.pr)}`, 'PR과 코드 역추적 보기')}>
-                  <td className="mono small">{h.t}</td><td>{h.pr}</td><td>{h.req}</td><td>{h.lines}줄·{h.files}파일</td>
-                  <td><Tag tone={h.result === '정상' ? 'green' : 'amber'}>{h.result}</Tag></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : <div className="muted small">아직 자동 처리한 요청이 없습니다. 다른 부서 화면에서 "간단 요청 보내기"를 눌러 보세요.</div>}
+          <LinkTable
+            rows={pol.history.slice().reverse()}
+            rowKey={(h) => h.pr}
+            rowHref={(h) => `#/work/prs/${prSlug(h.pr)}`}
+            rowTitle="PR과 코드 역추적 보기"
+            columns={[
+              { key: 't', header: '시각', render: (h) => <span className="mono small">{h.t}</span> },
+              { key: 'pr', header: 'PR', render: (h) => <span className="mono">{h.pr}</span> },
+              { key: 'req', header: '요청', render: (h) => <Ref s={s} id={h.req} /> },
+              { key: 'rule', header: '기준', render: (h) => (h.rule ? <Ref s={s} id={h.rule} /> : '-') },
+              { key: 'size', header: '변경', render: (h) => `${h.lines}줄·${h.files}파일` },
+              { key: 'result', header: '결과', render: (h) => <State v={h.result === '정상' ? '완료' : '장애 연결'} /> },
+            ]}
+          />
+        ) : <div className="muted small">아직 없습니다. 다른 부서 화면에서 "간단 요청 보내기"를 눌러 보세요.</div>}
       </Card>
     </>
   )
 }
 
-// ---------------------------------------------------------------- 지표 (모두 코드로 계산)
-export function Metrics({ s }: { s: S }) {
-  const prs = s.prs
-  const pct = (a: number, b: number) => (b ? Math.round((a / b) * 100) : null)
-  const avgPr = s.firstPrMinutes.length ? Math.round(s.firstPrMinutes.reduce((a, b) => a + b, 0) / s.firstPrMinutes.length) : null
-  const human = s.specs.reduce((a, x) => a + x.humanSentences, 0) + s.threads.flatMap((t) => t.messages).filter((m) => m.dept !== 'planning').length
+// ---------------------------------------------------------------- AI 승인 감사 (사람 사후 감사)
+export function Audit({ s, d }: P) {
+  const toast = useToast()
+  const today = s.audit.filter((x) => x.t.startsWith(TODAY))
+  const n = (k: AuditItem['kind']) => today.filter((x) => x.kind === k).length
+  const live = new Set(activeRules(s.autoPolicy).map((r) => r.id))
+  const cols: Column<AuditItem>[] = [
+    { key: 't', header: '시각', render: (x) => <span className="mono small">{x.t.slice(6)}</span> },
+    { key: 'kind', header: 'AI가 한 일', render: (x) => <State v={x.kind} /> },
+    { key: 'ref', header: '대상', render: (x) => <><Ref s={s} id={x.ref} /> <span className="small">{x.what}</span></> },
+    { key: 'basis', header: '어떤 기준으로', render: (x) => <span className="small">{x.rule && x.rule !== x.ref && <><Ref s={s} id={x.rule} /> · </>}<Linked s={s} text={x.basis} /></span> },
+    { key: 'verifier', header: '검증자', render: (x) => <span className="small">{x.verifier}</span> },
+    { key: 'result', header: '결과', render: (x) => <span className="small">{x.result}</span> },
+    { key: 'off', header: '', render: (x) => x.rule && live.has(x.rule) ? <Button size="small" onClick={() => { d({ type: 'disableRule', rule: x.rule! }); toast.show(`${x.rule} 해제`) }}>이 기준 끄기</Button> : null },
+  ]
   return (
     <>
-      <Lead>숫자는 코드가 계산한다. 지금 값은 목 데이터 기준이고, 실제 수치는 시연 실측값만 쓴다.</Lead>
-      <div className="grid kpi metrics">
-        <a href="#/work/prs" className="stat-link"><StatCard label="기획 한 줄 → 첫 PR" value={avgPr} unit="분" hint="요청 등록부터 첫 PR까지 평균" /></a>
-        <a href="#/work/prs" className="stat-link"><StatCard label="완료 기준 일치율" value={pct(prs.filter((p) => p.reviews[p.reviews.length - 1] === '통과').length, prs.length)} unit="%" hint={`PR ${prs.length}건 중 검수 통과`} /></a>
-        <a href="#/talk" className="stat-link"><StatCard label="사람이 쓴 문장 수" value={human} unit="개" hint="확정·머지 클릭은 따로 센다" /></a>
-        <a href="#/work/prs" className="stat-link"><StatCard label="PR 검수 1회 통과율" value={pct(prs.filter((p) => p.reviews[0] === '통과').length, prs.length)} unit="%" hint="수정 없이 첫 검수 통과" /></a>
-        <a href="#/work/specs/SPEC-7/R2" className="stat-link"><StatCard label="기각 안 경고" value={s.warnings} unit="건" hint="인사운영 ② check_plan" /></a>
-        <a href="#/requests/incoming" className="stat-link"><StatCard label="개선 초안 채택률" value={pct(s.draftsAccepted, s.draftsIn)} unit="%" hint={`인사·데이터 초안 ${s.draftsIn}건 중`} /></a>
-      </div>
+      <Lead>오늘 AI가 사람 클릭 없이 승인·처리한 건. 사전 승인 대신 사후 감사.</Lead>
+      <Stats items={[
+        { label: '자동 확정', value: n('자동 확정'), hint: '기획서' },
+        { label: '자동 머지', value: n('자동 머지'), hint: '학습된 기준으로' },
+        { label: '교차검증 승인', value: n('교차검증 승인'), hint: `거절 ${n('교차검증 거절')}`, href: '#/work/reviews' },
+        { label: '학습된 기준', value: n('기준 학습'), hint: `학습 거부 ${n('학습 거부')}`, href: '#/metrics/autonomy' },
+      ]} />
+      <Card as="section" title="건별 기록" sub={`오늘 ${today.length}건 · 최근 순`}>
+        {today.length
+          ? <LinkTable columns={cols} rows={today.slice().reverse()} rowKey={(x) => `${x.t}|${x.kind}|${x.ref}`} rowHref={(x) => hrefOf(s, x.ref)} rowTitle="이 건 보기" />
+          : <div className="empty"><b>오늘 AI가 스스로 처리한 건이 없습니다</b></div>}
+      </Card>
     </>
   )
 }
 
-// ---------------------------------------------------------------- 사후관리 (DejaFix 연동)
-// ---------------------------------------------------------------- 운영·배포 (머지된 PR이 어디까지 나갔나)
+// ---------------------------------------------------------------- 지표 (모두 코드로 계산, 각 숫자는 원천 화면으로)
+export function Metrics({ s }: { s: S }) {
+  const prs = s.prs
+  const pct = (a: number, b: number) => (b ? `${Math.round((a / b) * 100)}%` : '-')
+  const avgPr = s.firstPrMinutes.length ? `${Math.round(s.firstPrMinutes.reduce((a, b) => a + b, 0) / s.firstPrMinutes.length)}분` : '-'
+  const human = s.specs.reduce((a, x) => a + x.humanSentences, 0) + s.threads.flatMap((t) => t.messages).filter((m) => m.dept !== 'planning').length
+  const today = s.audit.filter((x) => x.t.startsWith(TODAY))
+  const n = (k: AuditItem['kind']) => today.filter((x) => x.kind === k).length
+  return (
+    <div className="flow-col">
+      <section className="flow-sec">
+        <h2>기획·개발</h2>
+        <Stats items={[
+          { label: '요청 → 첫 PR', value: avgPr, hint: '평균', href: '#/work/prs' },
+          { label: '완료 기준 일치', value: pct(prs.filter((p) => p.reviews[p.reviews.length - 1] === '통과').length, prs.length), hint: `PR ${prs.length}`, href: '#/work/prs' },
+          { label: '검수 1회 통과', value: pct(prs.filter((p) => p.reviews[0] === '통과').length, prs.length), hint: `PR ${prs.length}`, href: '#/work/prs' },
+          { label: '사람이 쓴 문장', value: human, href: '#/talk' },
+          { label: '기각 안 경고', value: s.warnings, hint: 'check_plan', href: '#/work/specs/SPEC-7/R2' },
+          { label: '초안 채택', value: pct(s.draftsAccepted, s.draftsIn), hint: `초안 ${s.draftsIn}`, href: '#/requests/incoming' },
+        ]} />
+      </section>
+      <section className="flow-sec">
+        <h2>자동 처리 · 오늘</h2>
+        <Stats items={[
+          { label: '자동 확정', value: n('자동 확정'), href: '#/metrics/audit' },
+          { label: '자동 머지', value: n('자동 머지'), href: '#/metrics/audit' },
+          { label: '교차검증 대기', value: s.reviews.filter((x) => !x.result).length, href: '#/work/reviews' },
+          { label: '교차검증 승인 / 거절', value: `${n('교차검증 승인')} / ${n('교차검증 거절')}`, href: '#/metrics/audit' },
+          { label: '사용 중 기준', value: activeRules(s.autoPolicy).length, href: '#/metrics/autonomy' },
+        ]} />
+      </section>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------- 운영·배포 (머지된 PR 시간순)
 export function Ops({ s, item }: { s: S; item?: string }) {
-  // item = 프로젝트(요청 id)면 그 프로젝트 PR만
   const req = s.requests.find((r) => r.id === item)
   const specIds = req ? s.specs.filter((x) => x.id === req.spec || x.request === req.id).map((x) => x.id) : []
   const prs = req ? s.prs.filter((p) => s.tasks.some((t) => t.id === p.task && specIds.includes(t.spec))) : s.prs
   const merged = prs.filter((p) => p.merged)
   const open = prs.filter((p) => !p.merged)
   const incidentOf = (pr: string) => s.incidents.find((i) => i.candidates.some((c) => c.pr === pr))
+  const mergedAt = (id: string) => s.activity.filter((a) => a.text.startsWith(`${id} `) && (a.point === 'github_merge_pull' || a.point === 'execute(merge_pr)')).pop()?.t ?? s.incidents.flatMap((i) => i.candidates).find((c) => c.pr === id)?.mergedAt ?? '-'
   return (
-    <>
-      <Lead>머지된 PR이 dev에 배포되고, 장애가 나면 어느 PR과 연결됐는지 본다. 배포·롤백 실행은 인프라(DejaFix)가 한다.</Lead>
-      {req && <Notice icon="bell"><Ref s={s} id={req.id} /> {req.title} 프로젝트의 PR만 보는 중 · <a href="#/work/ops">전체 보기</a> · <a href={`#/projects/${req.id}`}>프로젝트로 돌아가기</a></Notice>}
+    <div className="flow-col">
+      {req && <Notice icon="bell"><Ref s={s} id={req.id} /> {req.title} · <a href="#/work/ops">전체</a> · <a href={`#/projects/${req.id}`}>프로젝트</a></Notice>}
       <Stats items={[
         { label: '배포된 PR', value: merged.length },
         { label: '자동 머지', value: merged.filter((p) => p.auto).length },
-        { label: '머지 전 PR', value: open.length, href: '#/work/prs' },
+        { label: '사람 머지', value: merged.filter((p) => !p.auto).length },
+        { label: '머지 전', value: open.length, href: '#/work/prs' },
+        { label: '장애 연결', value: merged.filter((p) => incidentOf(p.id)).length, href: '#/work/aftercare' },
       ]} />
-      <Card title="배포 이력" sub="머지 = dev 배포 (데모 기준)" as="section">
-        <LinkTable
-          rows={merged.slice().reverse()}
-          rowKey={(p) => p.id}
-          rowHref={(p) => `#/work/prs/${prSlug(p.id)}`}
-          rowTitle="PR과 코드 역추적 보기"
-          columns={[
-            { key: 'id', header: 'PR', render: (p) => <span className="mono">{p.id}</span> },
-            { key: 'title', header: '내용' },
-            { key: 'branch', header: '브랜치', render: (p) => <span className="mono small">{p.branch}</span> },
-            { key: 'how', header: '머지', render: (p) => <Tag tone={p.auto ? 'green' : 'neutral'}>{p.auto ? '자동 (간단 요청)' : '사람 (팀장)'}</Tag> },
-            { key: 'gate', header: '안전 레이어', render: (p) => `${p.gate.result} · ${p.gate.lines}줄·${p.gate.files}파일` },
-            { key: 'inc', header: '장애 연결', render: (p) => { const i = incidentOf(p.id); return i ? <a href={hrefOf(s, i.ctx)} title="사후관리에서 사건 보기"><Tag tone="amber">{i.ctx}</Tag></a> : <span className="muted">없음</span> } },
-          ]}
-        />
-      </Card>
-    </>
+      <Flow label="배포 이력">
+        {merged.slice().reverse().map((p) => {
+          const i = incidentOf(p.id)
+          return (
+            <Step key={p.id} name={mergedAt(p.id).slice(6) || '-'} on={!i} href={`#/work/prs/${prSlug(p.id)}`} title={<>{p.id} · {p.title.replace(/^[A-Z]\d+: /, '')}</>}>
+              <Pairs items={[
+                ['머지', mergedLabel(p)],
+                ['관문', `${p.gate.result} · ${p.gate.lines}줄·${p.gate.files}파일 · ${p.gate.paths}`],
+                ['장애', i ? <Ref s={s} id={i.ctx} /> : '없음'],
+              ]} />
+            </Step>
+          )
+        })}
+      </Flow>
+    </div>
   )
 }
 
-// ---------------------------------------------------------------- 사후관리 (DejaFix 연동)
+// ---------------------------------------------------------------- 사후관리 (DejaFix 연동). 사건마다 세로 흐름
 export function Aftercare({ s, item }: { s: S; item?: string }) {
   useEffect(() => {
     if (item) document.getElementById(`inc-${item}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }, [item])
+  const acts = s.activity.filter((a) => a.ctx.startsWith('ctx_inc_'))
   return (
-    <>
-      <Lead>원인 판정과 롤백은 인프라(DejaFix)가 한다. 기획개발은 관련 PR 후보 회신, 롤백 교차검증, 문단 장애 표시, 재발 방지 요청 등록까지.</Lead>
-      {s.incidents.map((i) => (
-        <div key={i.ctx} id={`inc-${i.ctx}`}><Card className={item === i.ctx ? 'card-focus' : undefined} title={i.title} sub={<><a href={convoHref(i.ctx)} className="mono">{i.ctx} 에이전트 대화</a> · {i.at}</>} as="section">
-          <ol className="flow">
-            <li><Dep d="infra" />·<Dep d="data" /> → 기획개발 <Point>find_related_prs</Point> : 관련 PR 후보 {i.candidates.map((c, k) => <span key={c.pr}>{k > 0 && ', '}<Ref s={s} id={c.pr} /> (<a href={`#/work/specs/${c.spec}/${c.para}`}>{c.spec} {c.para}</a>, {c.mergedAt} 머지)</span>)}</li>
-            {i.rollbackCheck && <li><Dep d="safety" /> → 기획개발 <Point>verify_rollback_target</Point> : {i.rollbackCheck.target} 롤백 <State v={i.rollbackCheck.result} /> · {i.rollbackCheck.why}</li>}
-            <li>기획개발 <Point>link_incident</Point> : 문단 {i.candidates.map((c, k) => <span key={c.pr}>{k > 0 && ', '}<a href={`#/work/specs/${c.spec}/${c.para}`}>{c.spec} {c.para}</a></span>)}에 장애 표시 {i.linked ? <State v="완료" /> : null}</li>
-            {i.followUp && <li>재발 방지 요청 <Ref s={s} id={i.followUp} /> 후속 요청으로 등록</li>}
-          </ol>
-        </Card></div>
-      ))}
-      <Card title="이 사건의 활동" as="section">
-        <ActivityList s={s} items={s.activity.filter((a) => a.ctx.startsWith('ctx_inc_'))} />
-      </Card>
-    </>
+    <div className="flow-col">
+      {s.incidents.map((i) => {
+        const follow = s.requests.find((r) => r.id === i.followUp)
+        const c0 = i.candidates[0]
+        return (
+          <section key={i.ctx} id={`inc-${i.ctx}`} className={`flow-sec${item === i.ctx ? ' card-focus' : ''}`}>
+            <Head kicker={<><a href={convoHref(i.ctx)} className="mono plain-link">{i.ctx}</a> · {i.at}</>} title={i.title} side={<State v={i.linked ? '완료' : '접수'} />} />
+            <Flow>
+              <Step name="개시" on href={convoHref(i.ctx)} title={`${i.at} · 통합 에이전트`} />
+              <Step name="후보" on={i.candidates.length > 0} title={i.candidates.map((c) => c.pr).join(', ') || '없음'}>
+                <ul>{i.candidates.map((c) => <li key={c.pr}><Ref s={s} id={c.pr} /> · <a href={`#/work/specs/${c.spec}/${c.para}`} className="plain-link">{c.spec} {c.para}</a> · {c.mergedAt} 머지</li>)}</ul>
+              </Step>
+              <Step name="롤백" on={!!i.rollbackCheck} title={i.rollbackCheck ? `${i.rollbackCheck.result} · ${i.rollbackCheck.target}` : '없음'}>
+                {i.rollbackCheck && <p className="muted">{i.rollbackCheck.why}</p>}
+              </Step>
+              <Step name="문단" on={i.linked} href={c0 ? `#/work/specs/${c0.spec}/${c0.para}` : undefined} title={i.candidates.map((c) => `${c.spec} ${c.para}`).join(', ') || '-'} />
+              <Step name="후속" on={!!follow} href={follow ? hrefOf(s, follow.id) : undefined} title={follow ? `${follow.id} · ${follow.state}` : '없음'}>
+                {follow && <p>{follow.title}</p>}
+              </Step>
+            </Flow>
+          </section>
+        )
+      })}
+      <details className="proj-activity">
+        <summary>사건 활동 {acts.length}</summary>
+        <ActivityList s={s} items={acts.slice().reverse()} />
+      </details>
+    </div>
   )
 }
 
-// ---------------------------------------------------------------- 에이전트 활동 (부서별로 걸러 보기)
+// 부서별로 연결 지점을 묶는다: 부서 → 연결 지점 → 건수
+function byPoint(items: Act[]) {
+  const m = new Map<string, Act[]>()
+  for (const a of items) m.set(`${a.from === 'planning' ? '보냄' : '받음'}|${a.point}`, [...(m.get(`${a.from === 'planning' ? '보냄' : '받음'}|${a.point}`) ?? []), a])
+  return Array.from(m, ([k, v]) => ({ dir: k.split('|')[0], point: k.split('|').slice(1).join('|'), items: v })).sort((a, b) => b.items.length - a.items.length)
+}
+
+// ---------------------------------------------------------------- 에이전트 활동 (부서 → 연결 지점 → 건수)
 export function Activity({ s, item }: { s: S; item?: string }) {
-  const peer = item ?? 'all'
-  const peers = Array.from(new Set(s.activity.flatMap((a) => [a.from, a.to]).filter((d) => d !== 'planning')))
-  const rows = [...s.activity].reverse().filter((a) => peer === 'all' || a.from === peer || a.to === peer)
+  const peers: Dept[] = Array.from(new Set(s.activity.flatMap((a) => [a.from, a.to]).filter((x) => x !== 'planning')))
+  const peer = (item && peers.includes(item as Dept) ? item : 'all') as Dept | 'all'
+  const of = (x: Dept | 'all') => s.activity.filter((a) => x === 'all' || a.from === x || a.to === x)
+  const rows = of(peer)
+  const list = <ListPane groups={[{ label: '부서', rows: [
+    { key: 'all', href: '#/metrics/activity', on: peer === 'all', title: '전체', meta: <>{s.activity.length}건</> },
+    ...peers.map((x) => ({ key: x, href: `#/metrics/activity/${x}`, on: peer === x, title: DEPT_NAME[x], meta: <>{of(x).length}건</> })),
+  ] }]} />
   return (
-    <>
-      <Lead>기획개발이 다른 부서와 주고받은 연결 지점을 시간 역순으로 본다. 사건·요청 단위는 context_id로 묶인다.</Lead>
-      <div className="chips" style={{ marginBottom: 14 }}>
-        <a href="#/metrics/activity" className={`q-chip${peer === 'all' ? ' on' : ''}`}>전체 {s.activity.length}</a>
-        {peers.map((d) => (
-          <a key={d} href={`#/metrics/activity/${d}`} className={`q-chip${peer === d ? ' on' : ''}`}>
-            {DEPT_NAME[d]} {s.activity.filter((a) => a.from === d || a.to === d).length}
-          </a>
+    <Layout
+      list={list}
+      head={<Head kicker={`활동 ${rows.length}건`} title={peer === 'all' ? '전체 부서' : DEPT_NAME[peer]} />}
+      below={
+        <details className="proj-activity">
+          <summary>활동 로그 {rows.length}</summary>
+          <ActivityList s={s} items={rows.slice().reverse()} />
+        </details>
+      }
+    >
+      <Flow label="연결 지점">
+        {byPoint(rows).map((g) => (
+          <Step key={`${g.dir}|${g.point}`} name={g.dir} on title={<><Point>{g.point}</Point> · {g.items.length}건</>}>
+            {g.items.slice(-2).reverse().map((a, i) => <p key={i}><span className="mono muted">{a.t.slice(6)}</span> <Dep d={a.from} /> → <Dep d={a.to} /> · <Linked s={s} text={a.text} /></p>)}
+          </Step>
         ))}
-      </div>
-      <Card title="활동 로그" sub={`${rows.length}건`} as="section">
-        <ActivityList s={s} items={rows} />
-      </Card>
-    </>
+      </Flow>
+    </Layout>
   )
 }
 
-// ---------------------------------------------------------------- 연동 (부서 간 연결 지점)
+// ---------------------------------------------------------------- 부서 연동 (부서별 연결 지점 · 오늘 호출 수)
 export function Links({ s, d }: P) {
-  const count = (p: Port) => s.activity.filter((a) => a.point.startsWith(p.point.split(' ')[0]) && (p.dir === 'in' ? a.from === p.peer || p.peer === 'support' && a.from === 'marketing' : a.to === p.peer)).length
-  const cols: Column<Port>[] = [
-    { key: 'peer', header: '상대', render: (p) => <Dep d={p.peer} /> },
-    { key: 'point', header: '연결 지점', render: (p) => <Point>{p.point}</Point> },
-    { key: 'kind', header: '방식' },
-    { key: 'grade', header: '등급', render: (p) => <Grade g={p.grade} /> },
-    { key: 'priority', header: '우선순위', render: (p) => <Tag tone={p.priority === 'required' ? 'green' : 'neutral'}>{p.priority}</Tag> },
-    { key: 'what', header: '하는 일' },
-    { key: 'n', header: '오늘 호출', numeric: true, render: (p) => count(p) },
-  ]
+  const count = (p: (typeof PORTS)[number]) => s.activity.filter((a) => a.point.startsWith(p.point.split(' ')[0]) && (p.dir === 'in' ? a.from === p.peer || (p.peer === 'support' && a.from === 'marketing') : a.to === p.peer)).length
+  const peers = Array.from(new Set(PORTS.map((p) => p.peer)))
   return (
-    <>
-      <Lead>기획개발이 다른 부서와 만나는 연결 지점. 공통 구성안·부서별 수정 요청(10/22) 기준이고, 시나리오 A 필수는 required.</Lead>
+    <div className="flow-col">
       <SendWindow d={d} />
-      <div className="stack">
-        <Card title="받는 연결" sub="다른 부서가 기획개발을 부름" as="section">
-          <LinkTable columns={cols} rows={PORTS.filter((p) => p.dir === 'in')} rowKey={(p) => `${p.point}|${p.peer}`} rowHref={(p) => `#/metrics/activity/${p.peer}`} rowTitle="이 부서와 주고받은 활동 보기" highlight={(p) => p.priority === 'required'} />
-        </Card>
-        <Card title="보내는 연결" sub="기획개발이 다른 부서를 부름" as="section">
-          <LinkTable columns={cols} rows={PORTS.filter((p) => p.dir === 'out')} rowKey={(p) => `${p.point}|${p.peer}`} rowHref={(p) => `#/metrics/activity/${p.peer}`} rowTitle="이 부서와 주고받은 활동 보기" />
-        </Card>
+      <div className="peer-grid">
+        {peers.map((peer) => {
+          const ports = PORTS.filter((p) => p.peer === peer)
+          return (
+            <Side key={peer} title={DEPT_NAME[peer]} href={`#/metrics/activity/${peer}`} sum={`연결 ${ports.length} · 오늘 ${ports.reduce((n, p) => n + count(p), 0)}건`}>
+              <ul className="peer-rows">
+                {ports.map((p) => (
+                  <li key={`${p.dir}|${p.point}`} title={p.what}>
+                    <span><Point>{p.point}</Point>{p.priority === 'required' && <> <Tag tone="green">필수</Tag></>}</span>
+                    <span className="muted">{p.dir === 'in' ? '받음' : '보냄'}</span>
+                    <span><Grade g={p.grade} /></span>
+                    <span className="num">{count(p)}</span>
+                  </li>
+                ))}
+              </ul>
+            </Side>
+          )
+        })}
       </div>
-      <Card title="전체 활동 로그" sub="context_id로 사건·요청 단위가 묶인다" as="section">
+      <details className="proj-activity">
+        <summary>전체 활동 로그 {s.activity.length}</summary>
         <ActivityList s={s} items={[...s.activity].reverse()} />
-      </Card>
-    </>
+      </details>
+    </div>
   )
 }

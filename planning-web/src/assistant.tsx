@@ -4,7 +4,7 @@
 // 실제로는 POST /api/planning/chat (SSE)으로 바꾸고, 같은 ChatEvent를 onEvent로 넘기면 된다.
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { Icon } from '@dejafix/common-frontend'
-import { AUTO_LEVELS, PROMOTE_AFTER, type Action, type State } from './data'
+import { activeRules, ruleText, type Action, type State } from './data'
 import { codeOf, traceOf, traceText } from './trace'
 
 export type ChatEvent =
@@ -54,11 +54,12 @@ function plan(q: string, s: State): Plan {
   }
   if (has('자동 처리 범위', '자동 범위', '승급', '자동 머지 범위')) {
     const pol = s.autoPolicy
-    const lv = AUTO_LEVELS[pol.level]
+    const live = activeRules(pol)
+    const waiting = s.reviews.filter((x) => !x.result)
     return {
       tool: 'planning_get_auto_policy', args: {},
-      summary: `L${pol.level}, 연속 정상 ${pol.streak}/${PROMOTE_AFTER}, 자동 머지 ${pol.history.length}건`,
-      answer: `지금 자동 처리 범위는 L${pol.level}(${lv.name}${pol.level ? `, ${lv.lines}줄·${lv.files}파일 이하` : ''})입니다. 마지막 단계 변경 뒤 연속 정상 머지는 ${pol.streak}건이고 ${PROMOTE_AFTER}건이 되면 승급을 제안합니다. ${pol.proposal ? `지금 L${pol.proposal.to} 승급 제안이 올라와 있어 지표 > 자동 처리 범위에서 팀장이 승인하면 됩니다.` : '올라온 승급 제안은 없습니다.'} 넓히는 것은 사람이 승인하고, 자동 머지한 PR이 장애에 연결되면 승인 없이 한 단계 줄입니다.`,
+      summary: `기준 ${live.length}개 사용 중, 교차검증 대기 ${waiting.length}건`,
+      answer: `지금 쓰는 자동 처리 기준은 ${live.length ? live.map((r) => `${r.id}(${ruleText(r)}, ${r.status})`).join(', ') : '없음'}입니다. 이 안의 PR은 검수 통과 뒤 바로 자동 머지하고, 밖이면 AI 교차검증을 거칩니다. 지금 교차검증 대기는 ${waiting.length}건입니다. 교차검증에서 승인된 건은 기준으로 한 번 학습하고 과거 기록으로 백테스트한 뒤 시험 중으로 씁니다. 기준으로 머지한 PR이 장애에 연결되면 그 기준은 바로 꺼집니다.`,
     }
   }
   if (has('장애', '사건', '롤백', 'incident')) {
@@ -77,8 +78,8 @@ function plan(q: string, s: State): Plan {
       tool: 'planning_list_pull_requests', args: { merged: false },
       summary: `열린 PR ${s.prs.filter((p) => !p.merged).length}건`,
       answer: waiting.length || fixing.length
-        ? `머지 대기 PR은 ${waiting.length}건${waiting.length ? `(${waiting.map((p) => p.id).join(', ')})` : ''}이고, 완료 기준 불일치로 수정 중인 PR은 ${fixing.length}건${fixing.length ? `(${fixing.map((p) => p.id).join(', ')})` : ''}입니다. 머지는 작업·PR 탭에서 팀장이 누릅니다.`
-        : '지금 열린 PR이 없습니다. SPEC-7을 확정하면 작업이 나뉘고 PR이 만들어집니다.',
+        ? `머지 대기 PR은 ${waiting.length}건${waiting.length ? `(${waiting.map((p) => p.id).join(', ')})` : ''}이고, 완료 기준 불일치로 수정 중인 PR은 ${fixing.length}건${fixing.length ? `(${fixing.map((p) => p.id).join(', ')})` : ''}입니다. 기준 안이면 자동 머지되고, 밖이면 AI 교차검증 대기열에 있습니다.`
+        : '지금 열린 PR이 없습니다. SPEC-7이 확정되면 작업이 나뉘고 PR이 만들어집니다.',
     }
   }
   if (has('SPEC', '기획서', '확정', 'spec')) {
@@ -89,7 +90,7 @@ function plan(q: string, s: State): Plan {
       summary: `${sp.id} ${sp.status}, 요구사항 ${sp.paras.filter((p) => p.kind === 'req').length}개, 경고 ${warn.length}개`,
       answer: sp.status === '확정'
         ? `${sp.id}는 이미 확정됐습니다.`
-        : `${sp.id}는 아직 초안입니다. 확정 전에 볼 것: ${sp.question ? `빈 항목 질문 1개("${sp.question}")가 남아 있고, ` : ''}${warn.map((p) => `${p.id}에 인사운영 ② 경고(${p.warn!.card}: ${p.warn!.text})`).join(', ')}가 붙어 있습니다. 확정할지는 팀장이 정합니다.`,
+        : `${sp.id}는 아직 초안입니다. 확정 전에 볼 것: ${sp.question ? `빈 항목 질문 1개("${sp.question}")가 남아 있고, ` : ''}${warn.map((p) => `${p.id}에 인사운영 ② 경고(${p.warn!.card}: ${p.warn!.text})`).join(', ')}가 붙어 있습니다. 답이 오면 경고 때문에 AI 교차검증을 거쳐 확정됩니다.`,
     }
   }
   if (has('요청', '처리', '할 일', '할일')) {
