@@ -43,3 +43,4 @@ export const IconRefresh = (p: P) => <Icon {...p}><path d="M20 11a8 8 0 0 0-14.5
 export const IconCheck = (p: P) => <Icon {...p}><path d="m5 12 5 5L20 7" /></Icon>;
 export const IconAlert = (p: P) => <Icon {...p}><path d="M12 3 2 20h20L12 3Z" /><path d="M12 10v4M12 17.5v.01" /></Icon>;
 export const IconTruck = (p: P) => <Icon {...p}><path d="M2 6h11v10H2zM13 9h4l3 3v4h-7" /><circle cx="7" cy="18" r="1.8" /><circle cx="17" cy="18" r="1.8" /></Icon>;
+export const IconAgents = (p: P) => <Icon {...p}><path d="M4 6a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2H9l-3 2.5V12H6a2 2 0 0 1-2-2V6Z" /><path d="M15 9h3a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2v2.5L15 17h-3a2 2 0 0 1-2-2v-1" /></Icon>;
