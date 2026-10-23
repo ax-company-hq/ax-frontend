@@ -195,6 +195,24 @@ const DEMO_OPTIONS: { key: keyof DemoRequest; label: string }[] = [
   { key: "infra_card_empty", label: "인프라 카드 비어 있음 (건너뜀)" },
 ];
 
+// 이름 붙인 장애 시나리오. 총괄 목 모드의 옵션 조합이다 (장애 종류 자체는 결제 장애 plan 하나뿐)
+const SCENARIOS: { id: string; label: string; hint: string; req: DemoRequest }[] = [
+  { id: "auto", label: "결제 장애 — 모두 자동 해결", hint: "진단·롤백·공지·보상·손실 리포트까지 사람 없이 끝납니다.", req: {} },
+  { id: "hold", label: "보상 쿠폰 금액 초과 — 사람 판단", hint: "쿠폰 지급이 기준을 넘어 🚩 사람 판단으로 멈춥니다. 승인·거절해 보세요.", req: { hold_coupon: true } },
+  { id: "retry", label: "공지 게시 실패 — 재시도로 복구", hint: "마케팅 공지가 한 번 실패하고 중앙 Agent가 다시 시도합니다.", req: { fail_marketing: true } },
+  { id: "transfer", label: "공지 담당 착오 — 다른 부서로 이관", hint: "공지 요청을 받은 부서가 '소관 아님'으로 돌려보내 중앙 Agent가 이관합니다.", req: { wrong_owner: true } },
+  { id: "partial", label: "인프라 AI 연결 끊김 — 일부 건너뛰고 종료", hint: "인프라 카드가 비어 진단·롤백을 건너뛰고 부분 종료합니다.", req: { infra_card_empty: true } },
+  { id: "storm", label: "겹친 사고 — 실패·이관·보류 한꺼번에", hint: "공지 실패, 이관, 쿠폰 보류가 한 사건에서 모두 일어납니다.", req: { hold_coupon: true, fail_marketing: true, wrong_owner: true } },
+  { id: "random", label: "무작위", hint: "위 옵션을 무작위로 섞어 시작합니다.", req: {} },
+  { id: "custom", label: "직접 고르기", hint: "아래 옵션을 직접 골라 시작합니다.", req: {} },
+];
+
+function randomDemo(): DemoRequest {
+  const req: DemoRequest = {};
+  for (const o of DEMO_OPTIONS) if (Math.random() < 0.4) req[o.key] = true;
+  return req;
+}
+
 export default function AgentChat() {
   const [incidents, setIncidents] = useState<OrchIncident[]>([]);
   const [executions, setExecutions] = useState<ExecutionRecord[]>([]);
@@ -202,7 +220,9 @@ export default function AgentChat() {
   const [safetyConn, setSafetyConn] = useState<Conn>("unknown");
   const [room, setRoom] = useState(ALL_ROOM);
   const [seen, setSeen] = useState<Record<string, number>>({});
+  const [scenario, setScenario] = useState("hold");
   const [demo, setDemo] = useState<DemoRequest>({ hold_coupon: true });
+  const picked = SCENARIOS.find((s) => s.id === scenario) ?? SCENARIOS[0];
   const [starting, setStarting] = useState(false);
   const [busyHold, setBusyHold] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -270,7 +290,8 @@ export default function AgentChat() {
     setStarting(true);
     setError(null);
     try {
-      const { context_id } = await orchestrator.startDemo(demo);
+      const req = scenario === "custom" ? demo : scenario === "random" ? randomDemo() : picked.req;
+      const { context_id } = await orchestrator.startDemo(req);
       await refresh();
       setRoom(context_id);
     } catch (e) {
@@ -311,16 +332,23 @@ export default function AgentChat() {
             <span className="chip bg-ink-100 text-ink-500">{POLL_MS / 1000}초마다 새로고침</span>
           </div>
         </div>
-        <div className="flex flex-col items-end gap-1.5">
-          <span title={orchOn ? "판매 사이트 결제 장애를 주입합니다 (총괄 목 모드)" : "중앙 Agent(총괄)가 꺼져 있어 시작할 수 없습니다"}>
-            <button className="btn-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
-              disabled={!orchOn || starting} onClick={start}>
-              {starting ? "시작하는 중…" : "장애 시나리오 시작"}
-            </button>
-          </span>
-          <details className="text-right text-xs text-ink-500">
-            <summary className="cursor-pointer rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500">시나리오 옵션</summary>
-            <fieldset className="mt-2 space-y-1 text-left">
+        <div className="flex w-full max-w-sm flex-col items-end gap-1.5">
+          <div className="flex w-full items-center gap-2">
+            <label htmlFor="scenario" className="sr-only">장애 시나리오</label>
+            <select id="scenario" value={scenario} onChange={(e) => setScenario(e.target.value)}
+              className="min-w-0 flex-1 rounded-lg border border-ink-300 bg-surface px-2 py-1.5 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500">
+              {SCENARIOS.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+            </select>
+            <span title={orchOn ? "고른 시나리오로 판매 사이트 결제 장애를 주입합니다 (총괄 목 모드)" : "중앙 Agent(총괄)가 꺼져 있어 시작할 수 없습니다"}>
+              <button className="btn-primary shrink-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+                disabled={!orchOn || starting} onClick={start}>
+                {starting ? "시작하는 중…" : "장애 시나리오 시작"}
+              </button>
+            </span>
+          </div>
+          <p className="w-full text-right text-xs text-ink-500">{picked.hint} 진행 중인 결제 장애가 있으면 같은 사건에 합쳐집니다.</p>
+          {scenario === "custom" && (
+            <fieldset className="w-full space-y-1 text-left text-xs text-ink-500">
               <legend className="sr-only">장애 시나리오 옵션</legend>
               {DEMO_OPTIONS.map((o) => (
                 <label key={o.key} className="flex items-center gap-2">
@@ -329,7 +357,7 @@ export default function AgentChat() {
                 </label>
               ))}
             </fieldset>
-          </details>
+          )}
         </div>
       </header>
 
