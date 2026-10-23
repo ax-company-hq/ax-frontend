@@ -4,12 +4,15 @@ import { useCallback, useEffect, useReducer, useState } from 'react'
 import { canAdvance, initialState, reducer, type Action, type State } from './data'
 
 const BUS = (import.meta.env.VITE_BUS_URL as string | undefined) ?? 'http://127.0.0.1:8790'
+// 목 버스는 목 모드에서만 붙는다. VITE_PLANNING_MOCK=0이면 버스에 연결하지 않는다 (실제 planning API로 바꿀 자리)
+const MOCK = ((import.meta.env.VITE_PLANNING_MOCK as string | undefined) ?? '1') !== '0'
 
 export function useSharedStore(): [State, (a: Action) => void, boolean] {
   const [local, localDispatch] = useReducer(reducer, initialState)
   const [remote, setRemote] = useState<State | null>(null)
 
   useEffect(() => {
+    if (!MOCK) return
     const es = new EventSource(`${BUS}/events`)
     es.addEventListener('state', (e) => setRemote(JSON.parse((e as MessageEvent).data) as State))
     es.onerror = () => {

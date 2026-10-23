@@ -34,6 +34,12 @@ npm run build -w planning-web
 - 버스가 없으면 화면 혼자 동작한다(상단 칩 "시연 데이터 · 단독"으로 표시).
 - 시뮬레이터에서 버튼을 누르면 기획개발 화면이 새로고침 없이 바뀐다.
 - `src/data.ts`의 리듀서를 바꾸면 버스를 다시 띄운다(버스가 같은 파일을 읽는다).
+- 요청이 들어오면 버스가 1.2초마다 한 단계씩 처리한다(`BUS_STEP_MS`로 조정). 기획서 질문의 답·교차검증 판단·기준 넓히기 판단은 다른 부서 화면(3003)이 그 부서 에이전트로서 보낸다.
+
+### 관리자 한 포트에 합칠 때
+
+- `PLANNING_WEB_BASE=/admin/planning/ npm run build -w @ax/planning-web` — 자산 경로만 바뀌고, 화면 이동은 해시(`#/...`)라 그대로 동작한다.
+- `VITE_PLANNING_MOCK=0`이면 목 버스에 연결하지 않는다(실제 planning API로 바꿀 자리). 기본값은 1(목 모드).
 - 고객사 값은 루트 `.env`의 `VITE_COMPANY_NAME`·`VITE_COMPANY_TAGLINE`·`VITE_SHOP_WEB_URL`·`VITE_COMPANY_LOGO`(`src/company.ts`).
 
 ## 3. 입출력 계약

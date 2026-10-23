@@ -8,7 +8,7 @@ export const COMPANY = {
 
 // 판매 사이트 파비콘을 브랜드 아이콘으로 쓴다. ① .env에 지정한 아이콘 ② 흔한 경로(icon.svg·favicon.svg·favicon.ico)를
 // 이미지로 불러 보기 ③ 사이트 HTML의 <link rel="icon"> (CORS가 열려 있을 때) ④ 다 안 되면 기본 로고
-const FALLBACK_ICON = '/logo-mark.svg'
+const FALLBACK_ICON = `${import.meta.env.BASE_URL}logo-mark.svg` // 하위 경로(/admin/planning/)로 배포해도 맞게
 const COMMON_PATHS = ['/icon.svg', '/favicon.svg', '/favicon.ico', '/favicon.png']
 
 function loads(src: string, ms = 2500): Promise<boolean> {
