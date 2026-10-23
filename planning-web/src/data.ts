@@ -280,6 +280,7 @@ export type Action =
   | { type: 'reviewPr'; pr: string }
   | { type: 'mergePr'; pr: string }
   | { type: 'acceptDraft'; request: string }
+  | { type: 'writeSpec'; request: string }
   | { type: 'approvePromotion' }
   | { type: 'rejectPromotion' }
   // 소통
@@ -344,9 +345,38 @@ export function checkSimple(title: string, policy: AutoPolicy = initialState.aut
   }
 }
 
+// 요청에 기획서 초안을 붙인다 (write_spec). 채택할 때, 또는 기획 중인데 기획서가 없을 때
+function draftSpecFor(s: State, r: Request, adopted: boolean): State {
+  const n = Math.max(0, ...s.specs.map((x) => Number(x.id.replace('SPEC-', '')) || 0)) + 1
+  const specId = `SPEC-${n}`
+  const spec: Spec = {
+    id: specId, title: r.title, request: r.id, status: '초안',
+    problem: `${DEPT_NAME[r.from]}에서 받은 개선 초안: ${r.evidence}`, goal: `${r.title}`,
+    paras: [
+      { id: 'R1', kind: 'req', text: r.title },
+      { id: 'C1', kind: 'done', text: '바뀐 뒤 같은 문의·이상 신호가 다시 생기지 않는다' },
+    ],
+    question: '바꿀 범위(화면 문구만 / 동작까지)를 어디까지로 할까요?',
+    basis: [`${r.id} (${DEPT_NAME[r.from]})`, r.evidence], humanSentences: 0,
+  }
+  const t = now()
+  return {
+    ...s,
+    draftsAccepted: s.draftsAccepted + (adopted ? 1 : 0),
+    specs: [...s.specs, spec],
+    requests: s.requests.map((x) => (x.id === r.id ? { ...x, state: '기획 중', spec: specId } : x)),
+    threads: [...s.threads, { id: `TH-${n}`, on: specId, title: `${specId} · ${r.title}`, kind: 'spec', messages: [{ who: '기획개발 에이전트', dept: 'planning', t, text: `빈 항목 질문: ${spec.question}` }] }],
+    activity: [
+      ...s.activity,
+      ...(adopted ? [{ t, ctx: r.ctx, from: 'planning' as const, to: 'planning' as const, point: 'review_ticket_draft', kind: 'A2A' as const, grade: 'A' as const, text: `${r.id} 채택` }] : []),
+      { t, ctx: r.ctx, from: 'planning', to: 'planning', point: 'write_spec', kind: 'A2A', grade: 'A', text: `${specId} 초안 작성, 질문 1개` },
+    ],
+  }
+}
+
 // 간단 요청 한 번에 처리: write_spec → 자동 확정 → split_tasks → generate_pr(B) → review_pr → merge_pr(B) → 요청 부서 회신
 function autoComplete(s: State, req: Request): State {
-  const specId = `SPEC-${s.specs.length + 6}`
+  const specId = `SPEC-${Math.max(0, ...s.specs.map((x) => Number(x.id.replace('SPEC-', '')) || 0)) + 1}`
   const taskId = `T-${s.tasks.length + 10}`
   const prId = `PR #${s.prs.length + 30}`
   const est = estimate(req.title)
@@ -749,12 +779,12 @@ function inner(s: State, a: Action): State {
     case 'acceptDraft': {
       const r = s.requests.find((x) => x.id === a.request)
       if (!r || r.state !== '접수') return s
-      return {
-        ...s,
-        draftsAccepted: s.draftsAccepted + 1,
-        requests: s.requests.map((x) => (x.id === a.request ? { ...x, state: '기획 중' } : x)),
-        activity: [...s.activity, { t: now(), ctx: r.ctx, from: 'planning', to: 'planning', point: 'review_ticket_draft', kind: 'A2A', grade: 'A', text: `${r.id} 채택 → 기획서 작성 대기열` }],
-      }
+      return draftSpecFor(s, r, true)
+    }
+    case 'writeSpec': {
+      const r = s.requests.find((x) => x.id === a.request)
+      if (!r || s.specs.some((x) => x.id === r.spec || x.request === r.id)) return s
+      return draftSpecFor(s, r, false)
     }
     case 'approvePromotion': {
       const pol = s.autoPolicy
