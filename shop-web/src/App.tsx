@@ -10,6 +10,7 @@ import AxOrders from '@/pages/AxOrders'
 import Cart from '@/pages/Cart'
 import Checkout from '@/pages/Checkout'
 import Home from '@/pages/Home'
+import Legal from '@/pages/Legal'
 import Login from '@/pages/Login'
 import OrderDetail from '@/pages/OrderDetail'
 import Orders from '@/pages/Orders'
@@ -36,6 +37,9 @@ export function App() {
               <Route path="/orders" element={<Orders />} />
               <Route path="/orders/:id" element={<OrderDetail />} />
               <Route path="/support" element={<Support />} />
+              <Route path="/terms" element={<Legal kind="terms" />} />
+              <Route path="/buyer-terms" element={<Legal kind="buyer-terms" />} />
+              <Route path="/privacy" element={<Legal kind="privacy" />} />
               <Route path="*" element={<Home />} />
             </Routes>
           </ShopShell>
