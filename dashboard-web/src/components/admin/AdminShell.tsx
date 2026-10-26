@@ -2,9 +2,10 @@ import { Link } from "@/lib/nav";
 import { usePathname } from "@/lib/nav";
 import { useEffect, useState, type ReactNode } from "react";
 import { api } from "@/lib/api";
-import { SHOP_WEB_URL } from "@/lib/env";
+import { PLANNING_WEB_URL, SHOP_WEB_URL } from "@/lib/env";
 import type { Health } from "@/lib/types";
 import { IconBell, IconBook, IconBox, IconChat, IconDashboard, IconReceipt, IconSearch, IconShield, IconStar, IconUsers } from "../icons";
+import { IconAgents, IconBell, IconBook, IconBox, IconChat, IconDashboard, IconReceipt, IconSearch, IconShield, IconStar } from "../icons";
 import { ThemeToggle } from "../ThemeToggle";
 
 const NAV = [
@@ -16,20 +17,18 @@ const NAV = [
   { href: "/kb", label: "지식베이스", Icon: IconBook },
   { href: "/finance", label: "재무 AI", Icon: IconShield },
   { href: "/hr", label: "인사 AI", Icon: IconUsers },
+  { href: "/agents/chat", label: "AI 대화방", Icon: IconAgents },
 ];
 
 const isActive = (path: string, href: string) => (href === "/" ? path === "/" : path.startsWith(href));
 
 function LogoMark() {
   return (
-    <svg width="34" height="30" viewBox="0 0 34 30" aria-hidden="true">
-      <path d="M5 28V8l7 5h10l7-5v20Z" fill="rgb(var(--brand-600))" />
-      <circle cx="17" cy="20" r="3.4" fill="rgb(var(--accent))" />
-    </svg>
+    <img src="/logo.png" width={34} height={34} alt="" aria-hidden="true" />
   );
 }
 
-/** Agent console frame: left icon rail + underline tabs, inside a rounded container on the canvas. */
+/** Agent console frame: left icon rail + underline tabs, filling the whole window. */
 export function AdminShell({ children }: { children: ReactNode }) {
   const path = usePathname();
   const [health, setHealth] = useState<Health | null>(null);
@@ -37,8 +36,8 @@ export function AdminShell({ children }: { children: ReactNode }) {
   const mock = health?.llm_provider === "mock";
 
   return (
-    <div className="flex h-screen bg-canvas p-3 text-ink-900 lg:p-6">
-      <div className="flex min-w-0 flex-1 overflow-hidden rounded-[28px] bg-app shadow-[0_20px_60px_-30px_rgba(30,30,60,0.35)]">
+    <div className="flex h-screen overflow-hidden bg-app text-ink-900">
+      <div className="flex min-w-0 flex-1 overflow-hidden bg-app">
         <nav className="flex w-[76px] shrink-0 flex-col items-center gap-2 border-r border-ink-100 py-6" aria-label="주 메뉴">
           <Link href="/" className="mb-6" aria-label="캣북스 상담원 홈"><LogoMark /></Link>
           {NAV.map(({ href, label, Icon }) => {
@@ -74,10 +73,12 @@ export function AdminShell({ children }: { children: ReactNode }) {
               )}
               <Link href="/console" title="문의 찾기" aria-label="문의 찾기"><IconSearch size={20} /></Link>
               <IconBell size={20} />
-              <Link href={SHOP_WEB_URL} className="rounded-full border border-ink-100 px-3 py-1.5 text-xs font-medium hover:bg-ink-100">쇼핑몰 보기 ↗</Link>
+              {/* 앱 사이 링크는 일반 <a>: Link는 http(s)가 아니면 라우터 경로로 처리해 basename(/admin) 아래에서 깨진다 */}
+              <a href={PLANNING_WEB_URL} className="rounded-full border border-ink-100 px-3 py-1.5 text-xs font-medium hover:bg-ink-100">기획개발 ↗</a>
+              <a href={SHOP_WEB_URL} className="rounded-full border border-ink-100 px-3 py-1.5 text-xs font-medium hover:bg-ink-100">쇼핑몰 보기 ↗</a>
             </div>
           </header>
-          <main className="min-h-0 flex-1 overflow-y-auto">{children}</main>
+          <main className="relative min-h-0 flex-1 overflow-y-auto">{children}</main>
         </div>
       </div>
     </div>

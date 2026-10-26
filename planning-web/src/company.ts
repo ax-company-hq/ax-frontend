@@ -7,10 +7,10 @@ export const COMPANY = {
   adminUrl: import.meta.env.VITE_DASHBOARD_WEB_URL ?? 'http://localhost:3001', // 관리자(/admin/)로 돌아가는 링크
 }
 
-// 판매 사이트 파비콘을 브랜드 아이콘으로 쓴다. ① .env에 지정한 아이콘 ② 흔한 경로(icon.svg·favicon.svg·favicon.ico)를
+// 판매 사이트 파비콘을 브랜드 아이콘으로 쓴다. ① .env에 지정한 아이콘 ② 흔한 경로(logo.png·icon.svg·favicon.svg·favicon.ico)를
 // 이미지로 불러 보기 ③ 사이트 HTML의 <link rel="icon"> (CORS가 열려 있을 때) ④ 다 안 되면 기본 로고
-const FALLBACK_ICON = `${import.meta.env.BASE_URL}logo-mark.svg` // 하위 경로(/admin/planning/)로 배포해도 맞게
-const COMMON_PATHS = ['/icon.svg', '/favicon.svg', '/favicon.ico', '/favicon.png']
+const FALLBACK_ICON = `${import.meta.env.BASE_URL}logo.png` // 하위 경로(/admin/planning/)로 배포해도 맞게
+const COMMON_PATHS = ['/logo.png', '/icon.svg', '/favicon.svg', '/favicon.ico', '/favicon.png']
 
 function loads(src: string, ms = 2500): Promise<boolean> {
   return new Promise((resolve) => {

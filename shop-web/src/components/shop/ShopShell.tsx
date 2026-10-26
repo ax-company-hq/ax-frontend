@@ -14,12 +14,7 @@ import { ThemeToggle } from "../ThemeToggle";
 function Logo() {
   return (
     <Link href="/" className="flex shrink-0 items-center gap-2 whitespace-nowrap" aria-label="캣북스 홈">
-      <svg width="34" height="30" viewBox="0 0 34 30" aria-hidden="true">
-        <path d="M5 28V8l7 5h10l7-5v20Z" fill="rgb(var(--brand-600))" />
-        <circle cx="12.5" cy="19" r="1.8" fill="rgb(var(--surface))" />
-        <circle cx="21.5" cy="19" r="1.8" fill="rgb(var(--surface))" />
-        <path d="M15 23c1 1 3 1 4 0" stroke="rgb(var(--surface))" strokeWidth="1.5" fill="none" strokeLinecap="round" />
-      </svg>
+      <img src="/logo.png" width={34} height={34} alt="" aria-hidden="true" />
       <span className="text-xl font-extrabold tracking-tight text-brand-600">캣북스</span>
     </Link>
   );
@@ -127,6 +122,11 @@ export function ShopShell({ children }: { children: ReactNode }) {
             <p className="mt-1 leading-relaxed">상품·저자·출판사는 모두 가상 데이터입니다. 상담 답변은 {health?.llm_provider === "anthropic" ? "Claude" : "오프라인 규칙(mock)"}으로 생성되고, 환불 판정은 항상 규칙 엔진이 합니다.</p>
           </div>
         </div>
+        <nav aria-label="약관" className="mx-auto flex max-w-6xl gap-4 px-4 pb-6">
+          <Link href="/terms" className="font-semibold text-ink-700 hover:underline">이용약관</Link>
+          <Link href="/buyer-terms" className="font-semibold text-ink-700 hover:underline">구매자 이용약관</Link>
+          <Link href="/privacy" className="font-semibold text-ink-700 hover:underline">개인정보처리방침</Link>
+        </nav>
       </footer>
     </div>
   );
