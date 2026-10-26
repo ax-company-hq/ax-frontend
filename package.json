@@ -6,6 +6,7 @@
     "shop-web",
     "dashboard-web",
     "planning-web",
+    "orchestrator-web",
     "types"
   ],
   "engines": {
@@ -15,6 +16,7 @@
     "dev:shop": "npm run dev -w shop-web",
     "dev:dashboard": "npm run dev -w dashboard-web",
     "dev:planning": "npm run dev -w planning-web",
+    "dev:orchestrator": "npm run dev -w orchestrator-web",
     "dev:planning-depts": "npm run dev:depts -w planning-web",
     "bus:planning": "npm run bus -w planning-web",
     "typecheck": "npm run typecheck --workspaces --if-present",
