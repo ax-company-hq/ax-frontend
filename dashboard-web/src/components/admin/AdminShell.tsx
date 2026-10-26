@@ -2,22 +2,27 @@ import { Link } from "@/lib/nav";
 import { usePathname } from "@/lib/nav";
 import { useEffect, useState, type ReactNode } from "react";
 import { api } from "@/lib/api";
-import { PLANNING_WEB_URL, SHOP_WEB_URL } from "@/lib/env";
+import { SHOP_WEB_URL } from "@/lib/env";
 import type { Health } from "@/lib/types";
-import { IconAgents, IconBell, IconBook, IconBox, IconChat, IconDashboard, IconMegaphone, IconReceipt, IconSearch, IconShield, IconStar, IconUsers } from "../icons";
+import { IconAgents, IconBell, IconBolt, IconBook, IconBox, IconChart, IconChat, IconDashboard, IconMegaphone, IconPlan, IconReceipt, IconSearch, IconShield, IconStar, IconUsers } from "../icons";
 import { ThemeToggle } from "../ThemeToggle";
+import { IconUser } from "../icons";
 
 const NAV = [
   { href: "/", label: "대시보드", Icon: IconDashboard },
+  { href: "/orchestrator", label: "총괄", Icon: IconBolt },
   { href: "/console", label: "상담 콘솔", Icon: IconChat },
   { href: "/claims", label: "클레임 판정", Icon: IconReceipt },
   { href: "/queue", label: "보상 큐", Icon: IconBox },
   { href: "/reviews", label: "후기 관리", Icon: IconStar },
   { href: "/kb", label: "지식베이스", Icon: IconBook },
   { href: "/finance", label: "재무 AI", Icon: IconShield },
+  { href: "/data", label: "데이터분석 AI", Icon: IconChart },
   { href: "/hr", label: "인사 AI", Icon: IconUsers },
   { href: "/marketing", label: "마케팅 AI", Icon: IconMegaphone },
+  { href: "/planning", label: "기획개발 AI", Icon: IconPlan },
   { href: "/agents/chat", label: "AI 대화방", Icon: IconAgents },
+  { href: "/support", label: "고객지원 AI", Icon: IconUser },
 ];
 
 const isActive = (path: string, href: string) => (href === "/" ? path === "/" : path.startsWith(href));
@@ -74,7 +79,6 @@ export function AdminShell({ children }: { children: ReactNode }) {
               <Link href="/console" title="문의 찾기" aria-label="문의 찾기"><IconSearch size={20} /></Link>
               <IconBell size={20} />
               {/* 앱 사이 링크는 일반 <a>: Link는 http(s)가 아니면 라우터 경로로 처리해 basename(/admin) 아래에서 깨진다 */}
-              <a href={PLANNING_WEB_URL} className="rounded-full border border-ink-100 px-3 py-1.5 text-xs font-medium hover:bg-ink-100">기획개발 ↗</a>
               <a href={SHOP_WEB_URL} className="rounded-full border border-ink-100 px-3 py-1.5 text-xs font-medium hover:bg-ink-100">쇼핑몰 보기 ↗</a>
             </div>
           </header>

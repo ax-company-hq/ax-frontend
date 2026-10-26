@@ -7,7 +7,8 @@
 
 | 경로 | 화면 |
 | --- | --- |
-| `/` | 대시보드: 문의·클레임 추이, 자주 걸리는 규칙, 답변 대기 문의, 보상 큐 앞줄 |
+| `/` | 대시보드: 문의·클레임 추이, 자주 걸리는 규칙, 부서별 호출 현황(총괄이 부서를 부른 횟수·오류·성공률·평균 응답, skill별 표·최근 호출), 오늘의 브리핑, 답변 대기 문의, 보상 큐 앞줄 |
+| `/orchestrator` | 총괄: 총괄 에이전트가 연 사건 목록과 상세(15단계 진행, 부서별 상태, 사람 승인 대기, 진행 기록). 읽기 전용 |
 | `/console` | 상담 콘솔: 문의 목록, 답변 초안(3가지 스타일)·근거·가드 검사, 요약 |
 | `/claims` | 클레임 판정: 규칙 엔진 결과 확인, 승인·거절, 입고·검수 |
 | `/queue` | 보상 큐: 입고 순서대로 환불·보상 지급 |
@@ -17,6 +18,7 @@
 | `/hr` | 인사 AI: 업무 기록(사람이 확인할 후보 결정, 계획 비교, 인사 AI가 한 일), 인수인계(진행 상황·완성도, 인계자 질문에 답하기), 담당 명부(영역별 담당·교대, 담당 공백). 인수인계 시작·확정은 총괄 AI가 부르므로 버튼이 없다 |
 | `/marketing` | 마케팅 AI(시연용 가상 데이터, API 호출 없음): 게시 중 공지·공지 초안·공지 번호로 보기(사실 필드만, 원인 없음), 쿠폰 발급 기록(총액=건수×단가, 한도·금액 불일치는 C 보류), 캠페인·SNS(Instagram)는 예정 기능과 정책 요약, 지표, 마케팅 AI가 한 일. 게시·발급은 총괄·고객지원 AI가 부르므로 실행 버튼이 없다 |
 | `/finance/guide` | 재무 AI 관리자 사용법 (5개 모듈 설명, 보류 큐에서 결정하는 법, 자주 묻는 질문) |
+| `/planning` | 기획개발 AI(캣북스 기획개발팀): 프로젝트·요청·작업·정리·소통·규정·자료·지표, 다른 부서 시뮬레이터. 화면 안 이동은 해시(`/planning#/requests`). 코드는 `src/planning/`(planning-web에서 옮김), 공통 컴포넌트 스타일은 `postcss.config.js`가 `.planning-scope` 안으로만 묶는다. 시연 데이터는 연동 버스(`VITE_BUS_URL`, 기본 127.0.0.1:8790, `npm run bus:planning`) |
 
 상단 '쇼핑몰 보기'는 루트 `.env`의 `VITE_SHOP_WEB_URL`(기본 `http://localhost:3000`)을 연다.
 '기획개발 ↗'은 `VITE_PLANNING_WEB_URL`(기본 `http://localhost:3002`, 게이트웨이에서는 `/admin/planning/`)을 연다. 앱 사이 링크는 일반 `<a>`다 (`lib/nav.tsx`의 `Link`는 http(s)가 아니면 라우터 경로로 처리해 `/admin` 아래에서 깨진다).
@@ -76,3 +78,9 @@ TODO: common-frontend 버전 태그로 설치 (AppShell 메뉴에 부서 항목,
 
 **현재 상태:** catbooks 화면은 자체 Tailwind 설정(`tailwind.config.ts`)과 `src/styles.css`의 CSS 변수(라이트·다크)로 그린다. 색 값은 모두 CSS 변수를 거치지만 common-frontend 토큰은 아직 쓰지 않는다.
 두 스타일을 한 번에 섞으면 `.btn`·`.card`·`.chip` 클래스 이름이 겹치므로, common-frontend 적용은 별도 PR로 한다.
+
+### 총괄·부서별 호출 현황 (개발용 임시 연결)
+`/orchestrator`와 대시보드의 「부서별 호출 현황」은 총괄 서버를 직접 부르지 않고 shop-api 관리 읽기 중계(`GET /api/shop/admin/orchestrator/incidents`, `.../departments`, GET만)를 부른다.
+- 개발 서버(`npm run dev`)에서는 기본값(`http://localhost:8010`, 토큰 `mock:admin`)으로 자동 연결된다. 운영 빌드는 `VITE_SHOP_ADMIN_API_URL`과 `VITE_SHOP_ADMIN_TOKEN`이 없으면 꺼지고 화면도 비어 있다.
+- shop-api는 이 화면의 출처를 허용해야 한다: `SHOP_CORS_ORIGINS=http://localhost:3000,http://localhost:3001`. 총괄 주소는 shop-api의 `SHOP_ORCHESTRATOR_URL`이다.
+- 토큰은 환경변수에서만 오고 브라우저 저장소에는 두지 않는다. 진짜 로그인과 역할(소유자·공동소유자·분야 관리자·에이전트)은 사람 인증(#265) 뒤에 이 자리를 대신한다.
