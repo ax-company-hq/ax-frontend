@@ -9,3 +9,8 @@ export const FINANCE_AGENT_URL = import.meta.env.VITE_FINANCE_AGENT_URL ?? 'http
 export const SAFETY_HUMAN_TOKEN = import.meta.env.VITE_SAFETY_HUMAN_TOKEN ?? ''
 /** AI 대화방: 총괄(orchestrator, 8000) 주소. 총괄은 CORS가 없어 기본값은 Vite 개발 프록시(/orch → vite.config.ts) */
 export const ORCHESTRATOR_URL = import.meta.env.VITE_ORCHESTRATOR_URL ?? '/orch'
+/** 상단 '기획개발' 링크가 여는 planning-web 주소. 게이트웨이에서는 `/admin/planning/` */
+export const PLANNING_WEB_URL = import.meta.env.VITE_PLANNING_WEB_URL ?? 'http://localhost:3002'
+/** `on`이면 관리자 화면 앞에 데모 비밀번호 입력이 선다. 실제 인증이 아니다 (고객이 실수로 들어오지 않게 하는 정도) */
+export const ADMIN_LOGIN = import.meta.env.VITE_ADMIN_LOGIN === 'on'
+export const ADMIN_DEMO_PASSWORD = import.meta.env.VITE_ADMIN_DEMO_PASSWORD ?? 'catbooks'
