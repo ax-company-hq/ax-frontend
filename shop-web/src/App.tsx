@@ -32,6 +32,7 @@ export function App() {
               <Route path="/orders/:id" element={<OrderDetail />} />
               <Route path="/support" element={<Support />} />
               <Route path="/terms" element={<Legal kind="terms" />} />
+              <Route path="/buyer-terms" element={<Legal kind="buyer-terms" />} />
               <Route path="/privacy" element={<Legal kind="privacy" />} />
               <Route path="*" element={<Home />} />
             </Routes>

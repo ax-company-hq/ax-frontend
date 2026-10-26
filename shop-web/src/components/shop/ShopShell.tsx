@@ -126,6 +126,7 @@ export function ShopShell({ children }: { children: ReactNode }) {
         </div>
         <nav aria-label="약관" className="mx-auto flex max-w-6xl gap-4 px-4 pb-6">
           <Link href="/terms" className="font-semibold text-ink-700 hover:underline">이용약관</Link>
+          <Link href="/buyer-terms" className="font-semibold text-ink-700 hover:underline">구매자 이용약관</Link>
           <Link href="/privacy" className="font-semibold text-ink-700 hover:underline">개인정보처리방침</Link>
         </nav>
       </footer>
