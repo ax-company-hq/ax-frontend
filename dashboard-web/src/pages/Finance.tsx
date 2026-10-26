@@ -11,13 +11,13 @@ import { SafetyQueue } from "@/components/finance/SafetyQueue";
 import { SettlementsSection } from "@/components/finance/Settlements";
 import { Link } from "@/lib/nav";
 import {
-  FINANCE_SERVER, FINANCE_TABS, SAFETY_SERVER, finance, incidentName, krw, sortIncidents, todoTab,
+  FINANCE_SERVER, FINANCE_TABS, SAFETY_SERVER, finance, incidentName, krw, plainText, sortIncidents, todoTab,
   type FinanceKpis, type FinanceTab, type FinanceTodo, type Review, type SelfTest, type SelfTestLastMeta,
 } from "@/lib/finance";
 
 // 재무 AI 화면 = 캣북스 재무팀. 기본 화면은 시나리오 A(결제 장애)의 "장애 사건 재무"(⑨ 쿠폰 장부 → ⑩ 손실 → ⑰ 사건 후 감사).
 // 평상시 업무(결산·대사·정산·한도 제안·감사)는 두 번째 탭에 둔다. 재무 AI 테스트는 서버가 10분마다 자동으로 한다.
-// 건별 금액 승인은 하지 않는다(건별 검사는 안전 관문). 숫자는 서버가 계산한 값을 그대로 보여 주고, 말만 쉽게 바꾼다.
+// 건별 금액 승인은 하지 않는다(건별 검사는 안전 장치). 숫자는 서버가 계산한 값을 그대로 보여 주고, 말만 쉽게 바꾼다.
 // 기준: ax-backend docs/notes/finance/2026-10-23-finance-redesign.md §8·§11·§12
 
 const REFRESH_MS = 30_000;
@@ -164,7 +164,7 @@ export default function FinancePage() {
           <h1 className="text-2xl font-bold tracking-tight">재무 AI</h1>
           <p className="mt-1 max-w-2xl text-sm text-ink-500">
             캣북스의 재무팀입니다. 장애가 나면 보상 쿠폰을 사건별 장부에 적고, 피해와 보상을 더해 손실을 정리하고, 끝난 뒤 보상이 규칙대로 나갔는지 감사합니다.
-            평소에는 결산·대사·정산·한도·감사를 합니다. 쿠폰·환불을 한 건씩 승인하지는 않습니다(그건 안전 관문이 기준표로 검사합니다).
+            평소에는 결산·대사·정산·한도·감사를 합니다. 쿠폰·환불을 한 건씩 승인하지는 않습니다(그건 안전 장치가 기준표로 검사합니다).
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 text-xs sm:ml-auto">
@@ -216,7 +216,7 @@ export default function FinancePage() {
                 <button type="button" onClick={() => goToQueue(null)}
                   className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 rounded-2xl bg-surface px-4 py-3 text-left shadow-sm transition hover:ring-2 hover:ring-brand-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500">
                   <Chip label="보류 쿠폰" tone={TONE.warn} />
-                  <span className="min-w-0 flex-1 text-sm font-medium text-ink-900">{incidentName(i.context_id)} 보상 쿠폰 {i.held_count}장이 보류 큐에서 결정을 기다림</span>
+                  <span className="min-w-0 flex-1 text-sm font-medium text-ink-900">{incidentName(i.context_id, i.component)} 보상 쿠폰 {i.held_count}장이 보류 큐에서 결정을 기다림</span>
                   <span className="text-xs font-medium text-brand-700">보류 큐로 →</span>
                 </button>
               </li>
@@ -226,7 +226,7 @@ export default function FinancePage() {
                 <button type="button" onClick={() => openIncident(i.context_id, true)}
                   className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 rounded-2xl bg-surface px-4 py-3 text-left shadow-sm transition hover:ring-2 hover:ring-brand-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500">
                   <Chip label="사건 감사" tone={TONE.bad} />
-                  <span className="min-w-0 flex-1 text-sm font-medium text-ink-900">{incidentName(i.context_id)} 사건 후 감사에서 확인할 점이 나옴</span>
+                  <span className="min-w-0 flex-1 text-sm font-medium text-ink-900">{incidentName(i.context_id, i.component)} 사건 후 감사에서 확인할 점이 나옴</span>
                   <span className="text-xs font-medium text-brand-700">보러 가기 →</span>
                 </button>
               </li>
@@ -235,8 +235,8 @@ export default function FinancePage() {
               <li key={`${t.kind}-${i}`}>
                 <button type="button" onClick={() => openTab(todoTab(t), true)}
                   className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 rounded-2xl bg-surface px-4 py-3 text-left shadow-sm transition hover:ring-2 hover:ring-brand-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500">
-                  <Chip label={TODO_KO[t.kind] ?? t.kind} tone={TODO_TONE[t.kind] ?? TONE.muted} />
-                  <span className="min-w-0 flex-1 text-sm font-medium text-ink-900">{t.title}</span>
+                  <Chip label={TODO_KO[t.kind] ?? "할 일"} tone={TODO_TONE[t.kind] ?? TONE.muted} />
+                  <span className="min-w-0 flex-1 text-sm font-medium text-ink-900">{plainText(t.title)}</span>
                   {t.amount != null && <span className="text-sm tabular-nums text-ink-700">{krw(t.amount)}</span>}
                   <span className="text-xs font-medium text-brand-700">보러 가기 →</span>
                 </button>

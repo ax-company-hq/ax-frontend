@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { shortDateTime } from "@/lib/format";
+import { humanId, shortDateTime } from "@/lib/format";
 import type { Envelope, FinanceMeta } from "@/lib/finance";
 
 // 재무 화면 공통 부품: 칩, 예시 데이터 표시, 불러오기·오류·빈 상태, 섹션 틀, 데이터 훅.
@@ -48,14 +48,41 @@ export const Waiting = ({ what = "불러오는 중…" }: { what?: string }) => 
   <p className="py-8 text-center text-sm text-ink-500" aria-live="polite">{what}</p>
 );
 
-/** 섹션 틀: 제목·설명·오른쪽 도구 + 본문 */
-export function Panel({ id, title, hint, meta, tools, children }: { id?: string; title: string; hint?: ReactNode; meta?: FinanceMeta | null; tools?: ReactNode; children: ReactNode }) {
+/**
+ * 관련 기록 번호. 평소에는 접어 두고, 직원이 "기록 번호 보기"를 누르면 "쿠폰 3053 (cpn_3053)"처럼 보여 준다.
+ * `sellers`: 판매자 번호 → 이름
+ */
+export function RefList({ refs, sellers, label = "기록 번호 보기" }: { refs: (string | null | undefined)[]; sellers?: Record<string, string>; label?: string }) {
+  const ids = [...new Set(refs.filter((r): r is string => !!r))];
+  if (!ids.length) return null;
+  return (
+    <details className="mt-1 text-[11px] text-ink-500">
+      <summary className="cursor-pointer select-none hover:text-ink-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500">{label} ({ids.length})</summary>
+      <ul className="mt-1 flex flex-wrap gap-1">
+        {ids.map((r) => {
+          const word = humanId(r, sellers);
+          return (
+            <li key={r} className="rounded bg-ink-100 px-1.5 py-0.5">
+              {word === r ? <code className="font-mono">{r}</code> : <>{word} <code className="font-mono text-[10px] text-ink-500">({r})</code></>}
+            </li>
+          );
+        })}
+      </ul>
+    </details>
+  );
+}
+
+/**
+ * 섹션 틀: 제목·설명·오른쪽 도구 + 본문.
+ * `titleHidden`: 바로 위 탭 이름과 같은 제목이면 화면에서는 숨기고(읽기 프로그램에는 남김) 한 번만 보이게 한다.
+ */
+export function Panel({ id, title, titleHidden, hint, meta, tools, children }: { id?: string; title: string; titleHidden?: boolean; hint?: ReactNode; meta?: FinanceMeta | null; tools?: ReactNode; children: ReactNode }) {
   return (
     <section id={id} aria-labelledby={id ? `${id}-title` : undefined} className="card scroll-mt-4 p-4 sm:p-5">
       <div className="flex flex-wrap items-start gap-x-3 gap-y-2">
         <div className="min-w-0 flex-1">
           <h2 id={id ? `${id}-title` : undefined} className="flex flex-wrap items-center gap-2 text-base font-semibold text-ink-900">
-            {title} <MockBadge meta={meta} />
+            <span className={titleHidden ? "sr-only" : undefined}>{title}</span> <MockBadge meta={meta} />
           </h2>
           {hint && <p className="mt-0.5 max-w-3xl text-xs leading-relaxed text-ink-500">{hint}</p>}
           <MetaLine meta={meta} />

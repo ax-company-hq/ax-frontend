@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { shortDateTime } from "@/lib/format";
+import { humanId, shortDateTime } from "@/lib/format";
 import {
-  FinanceApiError, SAFETY_SERVER, batchOf, finance, krw, percent, readyPayout,
+  FinanceApiError, SAFETY_SERVER, batchOf, finance, krw, percent, periodKo, readyPayout,
   type BatchStatus, type MarketOp, type SettlementBatch, type StatementStatus,
 } from "@/lib/finance";
 import { Chip, Empty, Panel, ResourceBody, TONE, useResource } from "./bits";
@@ -27,7 +27,7 @@ const minus = (n: number | null) => (n ? `−${krw(n)}` : krw(n));
 const SELLER_KO: Record<string, string> = { approved: "승인", rejected: "거절", held: "사람 확인 중", undetermined: "판단 보류" };
 const HOLD_KO: Record<string, string> = { held: "정산 멈춤", pending_review: "사람 확인 중", rejected: "멈추지 않음" };
 
-function MarketOps({ tick }: { tick: number }) {
+function MarketOps({ tick, sellers }: { tick: number; sellers: Record<string, string> }) {
   const [ops, setOps] = useState<MarketOp[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
@@ -45,10 +45,10 @@ function MarketOps({ tick }: { tick: number }) {
           {ops.slice(0, 10).map((m, i) => (
             <li key={i} className="flex flex-wrap items-center gap-2 py-2">
               <span className="font-medium">{m.skill === "seller_review" ? "입점 심사" : "정산 멈춤"}</span>
-              <span className="text-ink-700">판매자 {m.seller_id}{m.risk_score != null && ` · 위험 점수 ${m.risk_score}점`}</span>
+              <span className="text-ink-700" title={m.seller_id}>{humanId(m.seller_id, sellers)}{m.risk_score != null && ` · 위험 점수 ${m.risk_score}점`}</span>
               <span className="ml-auto flex items-center gap-2 text-xs text-ink-500">
                 {shortDateTime(m.at)}
-                <Chip label={m.skill === "seller_review" ? SELLER_KO[m.decision ?? ""] ?? m.decision ?? "" : HOLD_KO[m.status ?? ""] ?? m.status ?? ""}
+                <Chip label={m.skill === "seller_review" ? SELLER_KO[m.decision ?? ""] ?? "확인 필요" : HOLD_KO[m.status ?? ""] ?? "확인 필요"}
                   tone={m.decision === "approved" || m.status === "held" ? TONE.ok : m.decision === "rejected" ? TONE.bad : TONE.muted} />
               </span>
             </li>
@@ -85,7 +85,7 @@ export function SettlementsSection({ tick, onChanged, onGoToQueue }: { tick: num
   }
 
   return (
-    <Panel id="settlements" title="③ 판매자 정산" meta={res.env?.meta}
+    <Panel id="settlements" title="③ 판매자 정산" titleHidden meta={res.env?.meta}
       hint="판매자에게 줄 돈(정산금) = 판매액 − 판매 수수료 − 판매자가 부담한 쿠폰 − 환불. 처리 중인 환불·교환이 있거나 위험한 판매자는 자동으로 보류하고, 나머지만 묶어 지급 승인을 요청합니다.">
       <ResourceBody res={res}>
         {(s) => {
@@ -96,7 +96,7 @@ export function SettlementsSection({ tick, onChanged, onGoToQueue }: { tick: num
           return (
             <div className="space-y-4">
               <p className="text-sm text-ink-700">
-                정산 기간 <b>{s.period}</b>{s.from && s.to && <span className="text-ink-500"> ({s.from.slice(0, 10)} ~ {s.to.slice(0, 10)})</span>}
+                정산 기간 <b>{periodKo(s.period)}</b>{s.from && s.to && <span className="text-ink-500"> ({s.from.slice(0, 10)} ~ {s.to.slice(0, 10)})</span>}
                 {s.pay_date && <> · 지급 예정일 <b>{s.pay_date}</b></>}
               </p>
 
@@ -118,7 +118,7 @@ export function SettlementsSection({ tick, onChanged, onGoToQueue }: { tick: num
                     <tbody>
                       {s.statements.map((x) => (
                         <tr key={x.seller_id} className="border-t border-ink-100 align-top">
-                          <td className="py-2"><b className="text-ink-900">{x.name}</b><div className="text-xs text-ink-500">{x.seller_id} · 주문 {x.orders}건</div></td>
+                          <td className="py-2"><b className="text-ink-900">{x.name}</b><div className="text-xs text-ink-500">주문 {x.orders}건 <code className="font-mono text-[10px]">{x.seller_id}</code></div></td>
                           <td className="py-2 text-right tabular-nums">{krw(x.gross)}</td>
                           <td className="py-2 text-right tabular-nums">{minus(x.commission)}<div className="text-xs text-ink-500">{percent(x.commission_rate)}</div></td>
                           <td className="py-2 text-right tabular-nums">{minus(x.seller_coupon)}</td>
@@ -129,7 +129,7 @@ export function SettlementsSection({ tick, onChanged, onGoToQueue }: { tick: num
                               ? <div className="flex flex-wrap gap-1">{x.hold_reasons.map((h) => <Chip key={h.code} label={h.label} tone={TONE.warn} />)}</div>
                               : <span className="text-xs text-ink-500">없음</span>}
                           </td>
-                          <td className="py-2"><Chip label={STATUS_KO[x.status]?.label ?? x.status} tone={STATUS_KO[x.status]?.tone ?? TONE.muted} /></td>
+                          <td className="py-2"><Chip label={STATUS_KO[x.status]?.label ?? "확인 필요"} tone={STATUS_KO[x.status]?.tone ?? TONE.muted} /></td>
                         </tr>
                       ))}
                     </tbody>
@@ -161,7 +161,7 @@ export function SettlementsSection({ tick, onChanged, onGoToQueue }: { tick: num
                     </span>
                   </div>
                 </div>
-                <p className="mt-2 text-sm text-ink-700">{BATCH_KO[s.batch.status] ?? s.batch.status}</p>
+                <p className="mt-2 text-sm text-ink-700">{BATCH_KO[s.batch.status] ?? "지급 상태를 확인할 수 없습니다."}</p>
                 {s.batch.review_id && (
                   <p className="mt-1 text-xs text-ink-500">
                     확인 번호 <code>{s.batch.review_id}</code> · 묶음 {s.batch.seller_ids.length}곳 {krw(s.batch.total_payout)}{" "}
@@ -182,7 +182,7 @@ export function SettlementsSection({ tick, onChanged, onGoToQueue }: { tick: num
               )}
               {problem && <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-800">{problem}</p>}
 
-              <MarketOps tick={tick} />
+              <MarketOps tick={tick} sellers={Object.fromEntries(s.statements.map((x) => [x.seller_id, x.name]))} />
             </div>
           );
         }}

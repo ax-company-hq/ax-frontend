@@ -1,16 +1,11 @@
 import { useState } from "react";
 import { ago, shortDateTime, won } from "@/lib/format";
-import { SAFETY_SERVER, finance, humanTokenSet, krw, type Review, type RuleHit } from "@/lib/finance";
+import { ACTION_KO, SAFETY_SERVER, finance, humanTokenSet, krw, type Review, type RuleHit } from "@/lib/finance";
 import { Chip, TONE } from "./bits";
 
 // 안전 장치 보류 큐: 사람만 정할 수 있는 일(C 등급). 정산 묶음 지급 승인도 여기로 온다.
 // 대시보드에 따로 보류 큐 화면이 없어서 재무 화면에 둔다. 결정은 safety에 사람 토큰으로 보낸다.
 
-const ACTION_KO: Record<string, string> = {
-  issue_coupon: "쿠폰 지급", refund_request: "환불", confirm_settlement: "판매자 정산 지급",
-  seller_review: "판매자 입점 승인", settlement_hold: "판매자 정산 멈춤", publish_notice: "공지 올리기",
-  rollback_deployment: "배포 되돌리기", restart_service: "서비스 다시 켜기", generate_pr: "코드 변경 만들기",
-};
 const WHO_KO: Record<string, string> = {
   marketing: "마케팅 AI", support: "고객지원 AI", finance: "재무 AI", hr: "인사 AI", orchestrator: "총괄 AI",
   data: "데이터 AI", planning: "기획 AI", infra: "인프라 AI", memory: "기록 AI", safety: "안전 장치",
@@ -25,8 +20,8 @@ const RULE_KO: Record<string, string> = {
   refund_single: "환불 한 건 금액", seller_risk: "판매자 위험 점수", base_grade: "항상 사람이 확인하는 일",
 };
 const MONEY_RULES = new Set(["coupon_total", "coupon_unit", "coupon_daily", "compensation_per_context", "compensation_per_customer", "refund_single"]);
-const action = (a: string) => ACTION_KO[a] ?? a;
-const who = (w: string) => WHO_KO[w] ?? w;
+const action = (a: string) => ACTION_KO[a] ?? "기타 작업";
+const who = (w: string) => WHO_KO[w] ?? "다른 AI";
 const num = (n: number) => n.toLocaleString("ko-KR");
 const decider = (by: string | null) => (by === "finance-ai" ? "재무 AI" : by === "auto-rule" ? "자동 규칙" : by ? `${by}님` : "사람");
 
@@ -40,7 +35,7 @@ function duration(sec: number): string {
 }
 
 function ruleSentence(h: RuleHit): string {
-  const name = RULE_KO[h.key] ?? h.key;
+  const name = RULE_KO[h.key] ?? "기타 기준";
   if (h.key === "base_grade") return "판매자 정산 지급처럼 항상 사람이 확인하는 일";
   if (h.outside) return `${name}가 아닌 곳을 바꿈: ${h.outside.join(", ")}`;
   if (h.invalid) return `${name} 정보가 없음`;
@@ -85,7 +80,7 @@ export function SafetyQueue({ reviews, error, highlight, reload }: { reviews: Re
         <p className={`text-sm font-semibold ${pending.length ? "text-amber-800" : "text-emerald-800"}`}>{pending.length ? `결정 기다림 ${pending.length}건` : "기다리는 일 없음"}</p>
       </div>
       <p className="mt-0.5 max-w-3xl text-xs leading-relaxed text-ink-500">
-        판매자 정산 지급처럼 사람만 정할 수 있는 일과, 안전 관문이 C로 보류한 보상 쿠폰·환불(한도 초과·금액 불일치)이 여기 모입니다. 금액과 이유를 보고 진행 또는 멈춤을 누르세요. 진행은 되돌릴 수 없고, 애매하면 멈춤을 누르세요. 정한 시간 안에 아무도 누르지 않으면 자동으로 멈춥니다.
+        판매자 정산 지급처럼 사람만 정할 수 있는 일과, 안전 장치가 C로 보류한 보상 쿠폰·환불(한도 초과·금액 불일치)이 여기 모입니다. 금액과 이유를 보고 진행 또는 멈춤을 누르세요. 진행은 되돌릴 수 없고, 애매하면 멈춤을 누르세요. 정한 시간 안에 아무도 누르지 않으면 자동으로 멈춥니다.
       </p>
       {error && <p role="alert" className="mt-3 rounded-xl bg-red-50 px-4 py-2 text-sm text-red-800">{SAFETY_SERVER}에서 보류 큐를 받지 못했습니다. {error}</p>}
       {!humanTokenSet && pending.length > 0 && <p className="mt-3 text-xs text-amber-800">결정 권한(VITE_SAFETY_HUMAN_TOKEN)이 설정되지 않아 버튼이 꺼져 있습니다.</p>}

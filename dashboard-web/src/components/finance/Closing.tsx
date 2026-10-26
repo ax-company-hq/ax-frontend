@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { shortDateTime } from "@/lib/format";
-import { finance, humanTokenSet, krw, signedKrw, type ClosingPeriod, type ClosingReport } from "@/lib/finance";
+import { finance, humanTokenSet, krw, plainText, signedKrw, type ClosingPeriod, type ClosingReport } from "@/lib/finance";
 import { Chip, Empty, Panel, ResourceBody, TONE, useResource } from "./bits";
 
 // ① 결산·리포트: 하루·한 달 손익 요약, 장부에 적을 내용 미리보기, 쉬운 말 설명, 사람이 결산 확정.
@@ -50,7 +50,7 @@ export function ClosingSection({ tick, onChanged }: { tick: number; onChanged: (
   );
 
   return (
-    <Panel id="closing" title="① 결산·리포트" meta={res.env?.meta} tools={tools}
+    <Panel id="closing" title="① 결산·리포트" titleHidden meta={res.env?.meta} tools={tools}
       hint="결산은 '이 기간에 얼마를 벌고 얼마를 썼나'를 정리해 숫자를 확정하는 일입니다. 숫자는 코드가 계산하고, 설명 문장만 AI가 씁니다. 숫자가 맞으면 아래에서 결산을 확정하세요.">
       <ResourceBody res={res}>
         {(r) => (
@@ -92,7 +92,7 @@ export function ClosingSection({ tick, onChanged }: { tick: number; onChanged: (
                 <p className="text-xs text-ink-500">{r.commentary_source === "llm" ? "AI가 위 숫자를 보고 쓴 문장입니다. 숫자는 표가 기준입니다." : "정해진 문장 틀(템플릿)에 숫자를 넣어 만든 설명입니다."}</p>
                 <div className="mt-2 rounded-2xl bg-surface-2 px-4 py-3 text-sm leading-relaxed text-ink-700">
                   <Chip label={r.commentary_source === "llm" ? "AI가 씀" : "템플릿 문장"} tone={r.commentary_source === "llm" ? TONE.info : TONE.muted} />
-                  <p className="mt-1.5 whitespace-pre-line">{r.commentary || "설명이 없습니다."}</p>
+                  <p className="mt-1.5 whitespace-pre-line">{plainText(r.commentary) || "설명이 없습니다."}</p>
                 </div>
 
                 <div className="mt-4 rounded-2xl border border-ink-100 px-4 py-3">

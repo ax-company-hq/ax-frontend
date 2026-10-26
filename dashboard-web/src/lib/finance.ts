@@ -1,5 +1,6 @@
 import { ApiError } from "./apiError";
 import { FINANCE_AGENT_URL, SAFETY_API_URL, SAFETY_HUMAN_TOKEN } from "./env";
+import { humanizeIds, incidentNo } from "./format";
 
 // 재무 화면 → finance(8105) · safety(8001) API. 응답은 ax-backend 규약 {data, meta} / {error: {code, message}}.
 // 재무 AI = 캣북스의 재무팀 (결산·대사·판매자 정산·예산 한도·사후 감사).
@@ -126,8 +127,8 @@ export interface AuditStats {
 export interface AuditReport { from: string; to: string; stats: AuditStats; findings: AuditFinding[] }
 
 // ---------------------------------------------------------------- §12 시나리오 A: 장애 사건 재무
-// ⑨ 쿠폰 장부 기록 → ⑩ 손실 리포트(피해 + 보상) → ⑰ 사건 후 감사. 쿠폰 건별 승인은 안전 관문(A/C)이 한다.
-/** 장부 출처: 이벤트 버스(coupon.issued) / 안전 관문 실행 기록(issue_coupon) / 목 시드 */
+// ⑨ 쿠폰 장부 기록 → ⑩ 손실 리포트(피해 + 보상) → ⑰ 사건 후 감사. 쿠폰 건별 승인은 안전 장치(A/C)가 한다.
+/** 장부 출처: 이벤트 버스(coupon.issued) / 안전 장치 실행 기록(issue_coupon) / 목 시드 */
 export type LedgerSource = "events" | "safety_executions" | "seed";
 
 export interface IncidentSummary {
@@ -465,8 +466,14 @@ export function todoTab(t: Pick<FinanceTodo, "kind" | "link">): FinanceTab {
 }
 
 // ---------------------------------------------------------------- 장애 사건 표시 도우미
-/** "ctx_inc_20261026_01" → "장애 #20261026_01" */
-export const incidentName = (contextId: string) => `장애 #${contextId.replace(/^ctx_inc_/, "")}`;
+export const COMPONENT_KO: Record<string, string> = { payment: "결제", order: "주문", shop: "쇼핑몰", search: "검색", delivery: "배송" };
+export const componentKo = (c: string | null | undefined) => (c ? COMPONENT_KO[c] ?? "서비스" : null);
+
+/** "ctx_inc_scn_a_0001" + "payment" → "장애 #0001 · 결제". 장애가 난 곳을 모르면 "장애 #0001" */
+export function incidentName(contextId: string, component?: string | null): string {
+  const where = componentKo(component);
+  return `장애 #${incidentNo(contextId)}${where ? ` · ${where}` : ""}`;
+}
 
 /** 최근 사건이 먼저. 시각이 없는 사건은 뒤로 */
 export function sortIncidents(list: IncidentSummary[]): IncidentSummary[] {
@@ -479,9 +486,76 @@ export function sortIncidents(list: IncidentSummary[]): IncidentSummary[] {
 }
 
 export const LEDGER_SOURCE_KO: Record<LedgerSource, { label: string; detail: string }> = {
-  events: { label: "이벤트", detail: "마케팅 AI가 쿠폰을 줄 때 보낸 알림(coupon.issued)을 받아 장부에 적었습니다." },
-  safety_executions: { label: "안전 관문 실행 기록", detail: "알림을 받을 수 없어, 안전 관문이 남긴 쿠폰 지급 실행 기록을 읽어 장부를 채웠습니다." },
+  events: { label: "이벤트 알림", detail: "마케팅 AI가 쿠폰을 줄 때 보낸 알림을 받아 장부에 적었습니다." },
+  safety_executions: { label: "안전 장치 실행 기록", detail: "알림을 받을 수 없어, 안전 장치가 남긴 쿠폰 지급 실행 기록을 읽어 장부를 채웠습니다." },
   seed: { label: "예시 데이터", detail: "연습용 예시 자료입니다. 실제 쿠폰 지급 기록이 아닙니다." },
 };
 export const ledgerSourceKo = (s: LedgerSource | string | null | undefined) =>
-  s && s in LEDGER_SOURCE_KO ? LEDGER_SOURCE_KO[s as LedgerSource] : { label: s || UNKNOWN, detail: "" };
+  s && s in LEDGER_SOURCE_KO ? LEDGER_SOURCE_KO[s as LedgerSource] : { label: s ? "기타 자료" : UNKNOWN, detail: "" };
+
+// ---------------------------------------------------------------- 코드 → 쉬운 말 (화면에 영어 코드를 그대로 보이지 않는다)
+/** 모르는 코드일 때 쓰는 말 */
+export const OTHER_CHECK = "기타 점검";
+
+/** ⑦ 사후 감사 의심 건 종류 */
+export const FINDING_KO: Record<string, string> = {
+  split_under_limit: "한도 바로 아래로 쪼개기",
+  repeat_refund: "같은 고객 반복 환불",
+  duplicate_coupon: "같은 고객 쿠폰 중복",
+  refund_rate_jump: "환불률 급변",
+  amount_recheck_failed: "금액 재계산 불일치",
+  gate_hold_trend: "안전 장치 보류·거절 증가",
+  compensation_outside_impact: "영향 고객 밖 보상",
+};
+export const findingKo = (code: string) => FINDING_KO[code] ?? OTHER_CHECK;
+
+/** ⑰ 사건 후 감사 점검 항목 */
+export const CHECK_KO: Record<IncidentCheckCode, string> = {
+  recipients_in_impact: "보상 받은 고객이 모두 영향 고객인지",
+  one_coupon_per_buyer: "고객당 쿠폰 1건",
+  per_customer_limit: "고객당 보상 한도",
+  per_incident_limit: "사건당 보상 한도",
+  amount_recheck: "보상 금액 다시 계산",
+};
+export const checkKo = (code: string, title?: string | null) =>
+  CHECK_KO[code as IncidentCheckCode] ?? (title && !/^[a-z0-9_]+$/.test(title) ? title : OTHER_CHECK);
+
+/** 쿠폰을 준 이유·목적 */
+export const PURPOSE_KO: Record<string, string> = {
+  payment_failure: "결제 실패 보상", compensation: "장애 보상", campaign: "마케팅 쿠폰", seller_promo: "판매자 할인 쿠폰",
+};
+export const purposeKo = (...codes: (string | null | undefined)[]) => {
+  for (const c of codes) if (c && PURPOSE_KO[c]) return PURPOSE_KO[c];
+  return "보상";
+};
+
+export const ACTION_KO: Record<string, string> = {
+  issue_coupon: "쿠폰 지급", refund_request: "환불", confirm_settlement: "판매자 정산 지급",
+  seller_review: "판매자 입점 승인", settlement_hold: "판매자 정산 멈춤", publish_notice: "공지 올리기",
+  rollback_deployment: "배포 되돌리기", restart_service: "서비스 다시 켜기", generate_pr: "코드 변경 만들기",
+};
+
+/** 설정 파일 이름 → 쉬운 말 */
+const SOURCE_FILE_KO: Record<string, string> = { "thresholds.toml": "안전 장치 기준표", "finance_policy.toml": "재무 정책표" };
+export const sourceFileKo = (s: string | null | undefined) => (s ? SOURCE_FILE_KO[s] ?? s : "");
+
+/** "2026-W43" → "2026년 43주차". 모양이 다르면 그대로 */
+export function periodKo(p: string): string {
+  const m = /^(\d{4})-W(\d{1,2})$/.exec(p);
+  return m ? `${m[1]}년 ${Number(m[2])}주차` : p;
+}
+
+/**
+ * 서버가 보낸 문장을 화면용으로: 기록 번호 → 쉬운 말, 남아 있는 개발자 말·코드 → 한국어.
+ * (예전 서버가 보낸 "출처 seed", "data 영향 고객", "의심: per_incident_limit" 같은 문장도 고친다)
+ */
+export function plainText(text: string | null | undefined, sellers?: Record<string, string>): string {
+  if (!text) return "";
+  return humanizeIds(text, sellers)
+    .replace(/(안전|실행) 관문/g, "안전 장치")
+    .replace(/\bdata 영향/g, "데이터 AI 영향")
+    .replace(/출처:? (events|safety_executions|seed)\b/g, (_, src: string) => `출처: ${ledgerSourceKo(src).label}`)
+    .replace(/\b(issue_coupon|refund_request|confirm_settlement)\b/g, (c: string) => ACTION_KO[c] ?? c)
+    .replace(/\b(damage_amount|compensation_total)\b/g, (c: string) => (c === "damage_amount" ? "피해 금액" : "보상 합계"))
+    .replace(/\b[a-z]+(?:_[a-z]+)+\b/g, (c: string) => CHECK_KO[c as IncidentCheckCode] ?? FINDING_KO[c] ?? c);
+}

@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { shortDateTime } from "@/lib/format";
+import { humanId, shortDateTime } from "@/lib/format";
 import {
-  DEFAULT_RECON_FILTER, RECON_ORDER, finance, humanTokenSet, krw,
+  DEFAULT_RECON_FILTER, RECON_ORDER, finance, humanTokenSet, krw, plainText,
   type ReconItem, type ReconStatus,
 } from "@/lib/finance";
 import { Chip, Empty, Panel, ResourceBody, TONE, useResource } from "./bits";
@@ -72,7 +72,7 @@ export function ReconciliationSection({ tick }: { tick: number }) {
   );
 
   return (
-    <Panel id="reconciliation" title="② 매출·PG 대사" meta={res.env?.meta} tools={tools}
+    <Panel id="reconciliation" title="② 매출·PG 대사" titleHidden meta={res.env?.meta} tools={tools}
       hint="대사는 '우리 주문 기록'과 '결제대행사(PG)가 보낸 정산 자료'를 한 건씩 맞춰 보는 일입니다. 재무 AI가 자동으로 맞추고, 맞지 않는 건만 보여 줍니다. 처리한 내용은 메모로 남기세요.">
       <ResourceBody res={res}>
         {(r) => {
@@ -113,13 +113,13 @@ export function ReconciliationSection({ tick }: { tick: number }) {
                   {items.map((i) => (
                     <li key={i.payment_id} className="grid gap-2 py-3 md:grid-cols-[150px_1fr_minmax(240px,320px)] md:items-start md:gap-4">
                       <div>
-                        <Chip label={RECON_KO[i.status]?.label ?? i.status} tone={RECON_KO[i.status]?.tone ?? TONE.muted} />
-                        <p className="mt-1 break-all text-xs text-ink-500">주문 {i.order_id}</p>
-                        <p className="break-all text-xs text-ink-500">결제 {i.payment_id}</p>
+                        <Chip label={RECON_KO[i.status]?.label ?? "확인 필요"} tone={RECON_KO[i.status]?.tone ?? TONE.muted} />
+                        <p className="mt-1 break-all text-xs text-ink-500" title={i.order_id}>{humanId(i.order_id)}</p>
+                        <p className="break-all text-xs text-ink-500" title={i.payment_id}>{humanId(i.payment_id)}</p>
                         {i.paid_at && <p className="text-xs text-ink-500">{shortDateTime(i.paid_at)} 결제</p>}
                       </div>
                       <div className="min-w-0 text-sm">
-                        <p className="text-ink-900">{i.reason ?? RECON_KO[i.status]?.hint}</p>
+                        <p className="text-ink-900">{i.reason ? plainText(i.reason) : RECON_KO[i.status]?.hint}</p>
                         <p className="mt-1 text-xs tabular-nums text-ink-500">
                           주문 {krw(i.order_amount)} · PG {krw(i.pg_amount)} · 수수료 {krw(i.fee)}
                           {i.expected_fee != null && i.expected_fee !== i.fee && ` (원래 ${krw(i.expected_fee)})`}
@@ -130,7 +130,7 @@ export function ReconciliationSection({ tick }: { tick: number }) {
                       </div>
                       <div>
                         {i.status === "matched" ? (
-                          i.note && <p className="text-xs text-ink-500">메모: {i.note}</p>
+                          i.note && <p className="text-xs text-ink-500">메모: {plainText(i.note)}</p>
                         ) : (
                           <NoteForm key={i.payment_id} item={i} onSaved={saveItem} />
                         )}

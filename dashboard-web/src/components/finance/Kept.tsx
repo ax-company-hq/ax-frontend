@@ -83,8 +83,9 @@ export function SelfTestPanel({ test, meta, loaded, open, running, disabled, onR
         </div>
         <p className="mt-1 text-xs opacity-80">
           {ago(test.ran_at)} ({shortDateTime(test.ran_at)})
-          {test.trigger && ` · ${TRIGGER_KO[test.trigger] ?? test.trigger}`}
-          {` · ${test.passed}/${test.total} 통과 · ${(test.duration_ms / 1000).toFixed(1)}초`}
+          {test.trigger && TRIGGER_KO[test.trigger] && ` · ${TRIGGER_KO[test.trigger]}`}
+          {` · ${test.passed}/${test.total} 통과`}
+          {test.duration_ms >= 100 && ` · ${(test.duration_ms / 1000).toFixed(1)}초`}
           {next && ` · ${next}`}
           {!next && every && ` · ${every} 자동 테스트`}
         </p>

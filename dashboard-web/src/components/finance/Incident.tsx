@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import { shortDateTime } from "@/lib/format";
+import { humanId, shortDateTime } from "@/lib/format";
 import {
-  barWidth, finance, incidentName, krw, ledgerSourceKo, sortIncidents,
+  barWidth, checkKo, finance, incidentName, krw, ledgerSourceKo, plainText, purposeKo, sortIncidents,
   type CouponStatus, type IncidentCheck, type IncidentCoupon, type IncidentDetail, type IncidentStepStatus, type IncidentSummary,
 } from "@/lib/finance";
-import { Chip, Empty, ErrorBox, MetaLine, MockBadge, ResourceBody, TONE, Waiting, useResource, type Resource } from "./bits";
+import { Chip, Empty, ErrorBox, MetaLine, MockBadge, RefList, ResourceBody, TONE, Waiting, useResource, type Resource } from "./bits";
 
 // 장애 사건 재무 (시나리오 A). 기준: ax-backend docs/notes/finance/2026-10-23-finance-redesign.md §12·§12-1
 // 재무가 하는 일: ⑨ 보상 쿠폰을 사건별 장부에 기록 → ⑩ 손실 리포트(피해 + 보상) → ⑰ 사건 후 감사.
-// 쿠폰을 한 장씩 승인하지 않는다(안전 관문이 A/C로 판정). 숫자는 서버 값을 그대로 보여 준다.
+// 쿠폰을 한 장씩 승인하지 않는다(안전 장치가 A/C로 판정). 숫자는 서버 값을 그대로 보여 준다.
 
 const STEP_MARK: Record<string, string> = { "9": "⑨", "10": "⑩", "17": "⑰" };
 const STEP_STATUS: Record<IncidentStepStatus, { label: string; tone: string; dot: string }> = {
@@ -16,7 +16,6 @@ const STEP_STATUS: Record<IncidentStepStatus, { label: string; tone: string; dot
   waiting: { label: "기다리는 중", tone: TONE.warn, dot: "bg-amber-400 text-white" },
   unavailable: { label: "확인할 수 없음", tone: TONE.muted, dot: "bg-ink-300 text-white" },
 };
-const COMPONENT_KO: Record<string, string> = { payment: "결제", order: "주문", shop: "쇼핑몰", search: "검색", delivery: "배송" };
 const CATEGORY_KO: Record<string, string> = { books: "도서", stationery: "문구", ebooks: "전자책", goods: "굿즈" };
 const COUPON_STATUS: Record<CouponStatus, { label: string; tone: string }> = {
   executed: { label: "지급됨", tone: TONE.ok },
@@ -24,10 +23,7 @@ const COUPON_STATUS: Record<CouponStatus, { label: string; tone: string }> = {
   rejected: { label: "거절됨", tone: TONE.bad },
   failed: { label: "지급 실패", tone: TONE.bad },
 };
-const REASON_KO: Record<string, string> = { payment_failure: "결제 실패 보상" };
-const MISSING_KO: Record<string, string> = { damage_amount: "피해 금액", impact: "데이터 영향 분석", compensation_total: "보상 합계" };
-
-const componentKo = (c: string | null) => (c ? COMPONENT_KO[c] ?? c : null);
+const MISSING_KO: Record<string, string> = { damage_amount: "피해 금액", impact: "데이터 AI 영향 분석", compensation_total: "보상 합계", compensation: "보상 쿠폰 장부", limits: "보상 한도" };
 const count = (n: number | null | undefined, unit: string) => (n == null ? "확인할 수 없음" : `${n.toLocaleString("ko-KR")}${unit}`);
 
 /** ✓ / ✗ / – 표시 */
@@ -109,7 +105,7 @@ function IncidentTabs({ recent, older, selected, onSelect }: { recent: IncidentS
               aria-selected={on} aria-controls={PANEL_ID} tabIndex={on || (!recentSelected && idx === 0) ? 0 : -1}
               onClick={() => onSelect(i.context_id)} onKeyDown={(e) => onKey(e, idx)}
               className={`inline-flex max-w-full items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500 ${on ? "bg-brand-600 text-white" : "bg-surface text-ink-700 ring-1 ring-ink-100 hover:bg-ink-100"}`}>
-              <span className="truncate">{incidentName(i.context_id)}</span>
+              <span className="truncate">{incidentName(i.context_id, i.component)}</span>
               <span className={`shrink-0 text-xs tabular-nums ${on ? "text-white/80" : "text-ink-500"}`}>{shortDay(i.opened_at)}</span>
               {dot && <span className={`h-2 w-2 shrink-0 rounded-full ${dot.cls} ${on ? "ring-2 ring-white" : ""}`} role="img" aria-label={dot.label} title={dot.label} />}
             </button>
@@ -126,7 +122,7 @@ function IncidentTabs({ recent, older, selected, onSelect }: { recent: IncidentS
               const dot = statusDot(i);
               return (
                 <option key={i.context_id} value={i.context_id}>
-                  {incidentName(i.context_id)} · {shortDay(i.opened_at)}{dot ? ` · ${dot.label}` : ""}
+                  {incidentName(i.context_id, i.component)} · {shortDay(i.opened_at)}{dot ? ` · ${dot.label}` : ""}
                 </option>
               );
             })}
@@ -169,10 +165,10 @@ function StepTracker({ d }: { d: IncidentDetail }) {
                 <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-base font-bold ${st.dot}`} aria-hidden>{STEP_MARK[s.no] ?? s.no}</span>
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-1.5">
-                    <b className="text-sm text-ink-900"><span className="sr-only">{s.no}단계 </span>{s.title}</b>
+                    <b className="text-sm text-ink-900"><span className="sr-only">{s.no}단계 </span>{plainText(s.title)}</b>
                     <Chip label={st.label} tone={st.tone} />
                   </div>
-                  {s.detail && <p className="mt-1 text-xs leading-relaxed text-ink-700">{s.detail}</p>}
+                  {s.detail && <p className="mt-1 text-xs leading-relaxed text-ink-700">{plainText(s.detail)}</p>}
                 </div>
               </li>
             );
@@ -223,7 +219,7 @@ function Cards({ d }: { d: IncidentDetail }) {
               <ul className="space-y-0.5 border-t border-ink-100 pt-1.5">
                 {impact.by_category.map((k) => (
                   <li key={k.category} className="flex justify-between gap-2 tabular-nums">
-                    <span>{CATEGORY_KO[k.category] ?? k.category} {k.orders}건</span><span>{krw(k.amount)}</span>
+                    <span>{CATEGORY_KO[k.category] ?? "기타"} {k.orders}건</span><span>{krw(k.amount)}</span>
                   </li>
                 ))}
               </ul>
@@ -244,7 +240,7 @@ function Cards({ d }: { d: IncidentDetail }) {
       <Card title="총 손실 = 피해 + 보상" value={krw(loss.total)} tone="text-red-700">
         <p className="tabular-nums">{krw(loss.damage_amount)} + {krw(loss.compensation_total)}</p>
         {loss.status === "partial"
-          ? <p className="font-medium text-amber-700">아직 다 모이지 않음{loss.missing.length > 0 && `: ${loss.missing.map((m) => MISSING_KO[m] ?? m).join(", ")}`}</p>
+          ? <p className="font-medium text-amber-700">아직 다 모이지 않음{loss.missing.length > 0 && `: ${loss.missing.map((m) => MISSING_KO[m] ?? "기타 값").join(", ")}`}</p>
           : <p className="text-emerald-700">모든 값이 모였습니다.</p>}
         <p className="text-[11px] text-ink-500">총괄 AI가 요청하면 이 숫자로 손실 리포트를 보냅니다.</p>
       </Card>
@@ -258,7 +254,7 @@ function Cards({ d }: { d: IncidentDetail }) {
         <div className="space-y-1 border-t border-ink-100 pt-1.5">
           <p className="flex justify-between gap-2"><span>고객 한 명 최대</span><span className="tabular-nums">{krw(pc.max_used)} / {krw(pc.limit)}</span></p>
           <Bar ratio={pcRatio} label="고객당 보상 한도 사용률" />
-          {pc.buyer_id && <p className="text-[11px] text-ink-500">가장 많이 받은 고객 {pc.buyer_id}</p>}
+          {pc.buyer_id && <p className="text-[11px] text-ink-500">가장 많이 받은 고객: {humanId(pc.buyer_id)}</p>}
         </div>
       </Card>
     </div>
@@ -273,7 +269,7 @@ function Recipients({ d, onGoToQueue }: { d: IncidentDetail; onGoToQueue: (revie
     <div>
       <h3 className="text-sm font-semibold text-ink-900">보상 쿠폰 받은 고객 <span className="font-normal text-ink-500">{rows.length}건</span></h3>
       <p className="mt-0.5 text-xs text-ink-500">
-        A는 한도 안이라 안전 관문이 바로 지급한 쿠폰, C는 한도를 넘거나 금액이 맞지 않아 사람 결정을 기다리는 쿠폰입니다(10분 안에 아무도 정하지 않으면 자동 취소).
+        A는 한도 안이라 안전 장치가 바로 지급한 쿠폰, C는 한도를 넘거나 금액이 맞지 않아 사람 결정을 기다리는 쿠폰입니다(10분 안에 아무도 정하지 않으면 자동 취소).
       </p>
       {rows.length ? (
         <div className="mt-2 overflow-x-auto rounded-2xl border border-ink-100">
@@ -294,8 +290,8 @@ function Recipients({ d, onGoToQueue }: { d: IncidentDetail; onGoToQueue: (revie
                 return (
                   <tr key={r.execution_id} className={`border-t border-ink-100 align-top ${needsHuman(r) ? "bg-amber-50/60" : ""}`}>
                     <td className="px-3 py-2">
-                      <b className="text-ink-900">{r.buyer_id}</b>
-                      <p className="text-[11px] text-ink-500">{REASON_KO[r.reason_code ?? ""] ?? r.reason_code ?? "보상"} · {shortDateTime(r.at)}</p>
+                      <b className="text-ink-900">{humanId(r.buyer_id)}</b>
+                      <p className="text-[11px] text-ink-500">{purposeKo(r.reason_code, r.purpose_code)} · {shortDateTime(r.at)}</p>
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums">
                       {krw(r.amount)}
@@ -316,10 +312,8 @@ function Recipients({ d, onGoToQueue }: { d: IncidentDetail; onGoToQueue: (revie
                         <span className="text-xs text-ink-700">{r.in_impact === true ? "맞음" : r.in_impact === false ? "목록에 없음" : "확인 불가"}</span>
                       </span>
                     </td>
-                    <td className="px-3 py-2 text-[11px] text-ink-500">
-                      <code className="break-all">{r.execution_id}</code>
-                      {r.review_id && <p>확인 번호 <code className="break-all">{r.review_id}</code></p>}
-                      {r.coupon_id && <p>쿠폰 <code className="break-all">{r.coupon_id}</code></p>}
+                    <td className="px-3 py-2">
+                      <RefList refs={[r.coupon_id, r.execution_id, r.review_id]} label="보기" />
                     </td>
                   </tr>
                 );
@@ -347,13 +341,9 @@ function Checks({ checks }: { checks: IncidentCheck[] }) {
             <li key={c.code} className={`flex gap-3 rounded-2xl border px-4 py-3 text-sm ${c.ok === false ? "border-red-100 bg-red-50/60" : "border-ink-100"}`}>
               <Mark ok={c.ok} />
               <div className="min-w-0">
-                <b className="text-ink-900">{c.title}</b>
-                {c.detail && <p className="mt-0.5 text-ink-700">{c.detail}</p>}
-                {c.refs.length > 0 && (
-                  <p className="mt-1 flex flex-wrap gap-1 text-[11px] text-ink-500">
-                    관련 기록: {c.refs.map((r) => <code key={r} className="rounded bg-ink-100 px-1.5 py-0.5">{r}</code>)}
-                  </p>
-                )}
+                <b className="text-ink-900">{checkKo(c.code, c.title)}</b>
+                {c.detail && <p className="mt-0.5 text-ink-700">{plainText(c.detail)}</p>}
+                <RefList refs={c.refs} />
               </div>
             </li>
           ))}
@@ -368,7 +358,7 @@ function NotOurJob() {
     <aside className="rounded-2xl border border-dashed border-ink-300 px-4 py-3 text-xs leading-relaxed text-ink-700">
       <p className="font-semibold text-ink-900">재무가 하지 않는 일</p>
       <ul className="mt-1 list-disc space-y-0.5 pl-4">
-        <li><b>쿠폰 한 장씩 승인</b>: 안전 관문이 판정합니다. 한도 안이면 A로 바로 지급, 넘거나 금액이 맞지 않으면 C로 보류합니다.</li>
+        <li><b>쿠폰 한 장씩 승인</b>: 안전 장치가 판정합니다. 한도 안이면 A로 바로 지급, 넘거나 금액이 맞지 않으면 C로 보류합니다.</li>
         <li><b>누구에게 얼마를 줄지 정하기</b>: 고객지원 AI가 보상 기준표로 정합니다.</li>
         <li><b>쿠폰 지급</b>: 마케팅 AI가 합니다.</li>
       </ul>
@@ -384,8 +374,7 @@ function IncidentDetailView({ id, summary, tick, onGoToQueue }: { id: string; su
   return (
     <div className="min-w-0 space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        <h3 className="text-lg font-semibold text-ink-900">{incidentName(id)}</h3>
-        {res.env && componentKo(res.env.data.component) && <span className="text-sm text-ink-500">{componentKo(res.env.data.component)} 장애</span>}
+        <h3 className="text-lg font-semibold text-ink-900">{incidentName(id, res.env?.data.component ?? summary?.component)}</h3>
         <MockBadge meta={meta} />
         {res.loading && res.env && <span className="text-[11px] text-ink-500" aria-live="polite">새로 받는 중…</span>}
       </div>
@@ -425,7 +414,7 @@ export function IncidentFinance({ list, selected, onSelect, tick, onGoToQueue }:
   const selectedSummary = items.find((i) => i.context_id === selected) ?? null;
   const panelLabel = selected && recent.some((i) => i.context_id === selected)
     ? { "aria-labelledby": tabId(selected) }
-    : { "aria-label": selected ? incidentName(selected) : "장애 사건" };
+    : { "aria-label": selected ? incidentName(selected, selectedSummary?.component) : "장애 사건" };
   const src = list.env?.meta.ledger_source ? ledgerSourceKo(list.env.meta.ledger_source) : null;
   return (
     <section id="incident-finance" aria-labelledby="incident-finance-title" className="card scroll-mt-4 p-4 sm:p-5">
@@ -450,7 +439,7 @@ export function IncidentFinance({ list, selected, onSelect, tick, onGoToQueue }:
             {list.error && <div className="mb-3"><ErrorBox message={`새로 받지 못해 이전 목록을 보여 줍니다. ${list.error}`} onRetry={list.reload} /></div>}
             {items.length === 0 ? (
               <Empty>
-                아직 재무가 아는 장애 사건이 없습니다. 장애가 나서 총괄 AI가 사건(<code>ctx_inc_…</code>)을 열고 보상 쿠폰이 나가면 여기에 나타납니다.
+                아직 재무가 아는 장애 사건이 없습니다. 장애가 나서 총괄 AI가 사건을 열고 보상 쿠폰이 나가면 여기에 나타납니다.
               </Empty>
             ) : (
               <div className="space-y-4">

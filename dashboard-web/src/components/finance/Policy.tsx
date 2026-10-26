@@ -1,4 +1,4 @@
-import { barWidth, finance, percent, withUnit, type PolicyAlert, type PolicyRule } from "@/lib/finance";
+import { barWidth, finance, percent, plainText, sourceFileKo, withUnit, type PolicyAlert, type PolicyRule } from "@/lib/finance";
 import { Chip, Empty, Panel, ResourceBody, TONE, useResource } from "./bits";
 
 // ⑤ 예산·한도 정책: 안전 장치가 건별 검사에 쓰는 한도와 얼마나 썼는지, 재무 AI의 한도 변경 제안.
@@ -31,7 +31,7 @@ function Usage({ rule }: { rule: PolicyRule }) {
 export function PolicySection({ tick }: { tick: number }) {
   const res = useResource("policy", () => finance.policy(), tick);
   return (
-    <Panel id="policy" title="⑤ 예산·한도 정책" meta={res.env?.meta}
+    <Panel id="policy" title="⑤ 예산·한도 정책" titleHidden meta={res.env?.meta}
       hint="쿠폰·환불·보상을 얼마까지 자동으로 처리할지 정한 한도입니다. 안전 장치가 이 한도로 한 건씩 검사하고, 재무 AI는 얼마나 썼는지 보고 한도를 바꾸자고 제안합니다.">
       <ResourceBody res={res}>
         {(p) => {
@@ -45,7 +45,7 @@ export function PolicySection({ tick }: { tick: number }) {
                     <li key={r.key} className="grid gap-2 py-3 sm:grid-cols-[1fr_auto] md:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_200px] md:items-center md:gap-4">
                       <div className="min-w-0">
                         <p className="text-sm font-medium text-ink-900">{r.label}</p>
-                        <p className="text-xs text-ink-500">한도 <b className="tabular-nums text-ink-700">{withUnit(r.limit, r.unit)}</b>{r.source && ` · ${r.source}`}</p>
+                        <p className="text-xs text-ink-500">한도 <b className="tabular-nums text-ink-700">{withUnit(r.limit, r.unit)}</b>{r.source && ` · ${sourceFileKo(r.source)}`}</p>
                       </div>
                       <p className="text-xs tabular-nums text-ink-500">
                         오늘 {r.used_today == null ? "확인할 수 없음" : withUnit(r.used_today, r.unit)} · 이번 달 {r.used_month == null ? "확인할 수 없음" : withUnit(r.used_month, r.unit)}
@@ -70,12 +70,12 @@ export function PolicySection({ tick }: { tick: number }) {
                             <span className="tabular-nums text-ink-700">{withUnit(x.current, unit)} → <b>{withUnit(x.proposed, unit)}</b></span>
                             {x.current != null && <Chip label={down ? "더 엄격하게" : "더 넉넉하게"} tone={down ? TONE.info : TONE.warn} />}
                           </div>
-                          <p className="mt-1 text-ink-700">{x.reason}</p>
+                          <p className="mt-1 text-ink-700">{plainText(x.reason)}</p>
                           {x.evidence && Object.keys(x.evidence).length > 0 && (
                             <dl className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-ink-500">
                               {Object.entries(x.evidence).map(([k, v]) => (
                                 <div key={k} className="flex gap-1">
-                                  <dt>{EVIDENCE_KO[k] ?? k}:</dt>
+                                  <dt>{EVIDENCE_KO[k] ?? "기타 근거"}:</dt>
                                   <dd className="tabular-nums text-ink-700">{typeof v === "number" ? (k === "sample" || k === "days" ? v.toLocaleString("ko-KR") : withUnit(v, unit)) : String(v)}</dd>
                                 </div>
                               ))}
