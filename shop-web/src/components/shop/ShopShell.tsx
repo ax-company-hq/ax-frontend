@@ -14,12 +14,7 @@ import { ThemeToggle } from "../ThemeToggle";
 function Logo() {
   return (
     <Link href="/" className="flex shrink-0 items-center gap-2 whitespace-nowrap" aria-label="캣북스 홈">
-      <svg width="34" height="30" viewBox="0 0 34 30" aria-hidden="true">
-        <path d="M5 28V8l7 5h10l7-5v20Z" fill="rgb(var(--brand-600))" />
-        <circle cx="12.5" cy="19" r="1.8" fill="rgb(var(--surface))" />
-        <circle cx="21.5" cy="19" r="1.8" fill="rgb(var(--surface))" />
-        <path d="M15 23c1 1 3 1 4 0" stroke="rgb(var(--surface))" strokeWidth="1.5" fill="none" strokeLinecap="round" />
-      </svg>
+      <img src="/logo.png" width={34} height={34} alt="" aria-hidden="true" />
       <span className="text-xl font-extrabold tracking-tight text-brand-600">캣북스</span>
     </Link>
   );
