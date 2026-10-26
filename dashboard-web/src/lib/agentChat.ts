@@ -42,7 +42,7 @@ export interface OrchIncident {
 
 /** POST /api/demo/incidents 본문 (main.py DemoRequest). 모두 선택 */
 export interface DemoRequest {
-  hold_coupon?: boolean;
+  hold_rollback?: boolean; // 롤백이 C 등급 보류가 된다(사람 승인 대기). 총괄 목 모드 옵션 이름
   fail_marketing?: boolean;
   wrong_owner?: boolean;
   infra_card_empty?: boolean;
