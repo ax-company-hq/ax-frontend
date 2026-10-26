@@ -7,3 +7,5 @@ export const SAFETY_API_URL = import.meta.env.VITE_SAFETY_API_URL ?? 'http://loc
 export const FINANCE_AGENT_URL = import.meta.env.VITE_FINANCE_AGENT_URL ?? 'http://localhost:8105'
 /** C 보류 결정에 쓰는 사람 토큰. 목 모드 데모는 `human:<이름>`. 비어 있으면 결정 버튼을 끈다 */
 export const SAFETY_HUMAN_TOKEN = import.meta.env.VITE_SAFETY_HUMAN_TOKEN ?? ''
+/** AI 대화방: 총괄(orchestrator, 8000) 주소. 총괄은 CORS가 없어 기본값은 Vite 개발 프록시(/orch → vite.config.ts) */
+export const ORCHESTRATOR_URL = import.meta.env.VITE_ORCHESTRATOR_URL ?? '/orch'
