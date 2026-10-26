@@ -4,19 +4,24 @@ import { useEffect, useState, type ReactNode } from "react";
 import { api } from "@/lib/api";
 import { SHOP_WEB_URL } from "@/lib/env";
 import type { Health } from "@/lib/types";
-import { IconAgents, IconBell, IconBook, IconBox, IconChat, IconDashboard, IconReceipt, IconPlan, IconSearch, IconShield, IconStar } from "../icons";
+import { IconAgents, IconBell, IconBolt, IconBook, IconBox, IconChart, IconChat, IconDashboard, IconPlan, IconReceipt, IconSearch, IconShield, IconStar, IconUsers } from "../icons";
 import { ThemeToggle } from "../ThemeToggle";
+import { IconUser } from "../icons";
 
 const NAV = [
   { href: "/", label: "대시보드", Icon: IconDashboard },
+  { href: "/orchestrator", label: "총괄", Icon: IconBolt },
   { href: "/console", label: "상담 콘솔", Icon: IconChat },
   { href: "/claims", label: "클레임 판정", Icon: IconReceipt },
   { href: "/queue", label: "보상 큐", Icon: IconBox },
   { href: "/reviews", label: "후기 관리", Icon: IconStar },
   { href: "/kb", label: "지식베이스", Icon: IconBook },
   { href: "/finance", label: "재무 AI", Icon: IconShield },
+  { href: "/data", label: "데이터분석 AI", Icon: IconChart },
+  { href: "/hr", label: "인사 AI", Icon: IconUsers },
   { href: "/planning", label: "기획개발 AI", Icon: IconPlan },
   { href: "/agents/chat", label: "AI 대화방", Icon: IconAgents },
+  { href: "/support", label: "고객지원 AI", Icon: IconUser },
 ];
 
 const isActive = (path: string, href: string) => (href === "/" ? path === "/" : path.startsWith(href));
