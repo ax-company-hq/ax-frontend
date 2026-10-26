@@ -9,6 +9,7 @@ import Dashboard from '@/pages/Dashboard'
 import Finance from '@/pages/Finance'
 import FinanceGuide from '@/pages/FinanceGuide'
 import Kb from '@/pages/Kb'
+import PlanningPage from '@/planning/PlanningPage'
 import Queue from '@/pages/Queue'
 import Reviews from '@/pages/Reviews'
 
@@ -25,6 +26,7 @@ export function App() {
           <Route path="/kb" element={<Kb />} />
           <Route path="/finance" element={<Finance />} />
           <Route path="/finance/guide" element={<FinanceGuide />} />
+          <Route path="/planning" element={<PlanningPage />} />
           <Route path="/agents/chat" element={<AgentChat />} />
           {/* catbooks 시절 /admin/* 주소 호환 */}
           <Route path="/admin/*" element={<LegacyAdminRedirect />} />
