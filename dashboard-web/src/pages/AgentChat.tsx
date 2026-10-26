@@ -214,7 +214,7 @@ function RoomList({ rooms, selected, unseen, onSelect }: { rooms: Room[]; select
 
 // ---------------------------------------------------------------- 페이지
 const DEMO_OPTIONS: { key: keyof DemoRequest; label: string }[] = [
-  { key: "hold_coupon", label: "쿠폰 지급을 C 등급 보류로 (사람 판단)" },
+  { key: "hold_rollback", label: "롤백을 C 등급 보류로 (사람 승인 대기)" },
   { key: "fail_marketing", label: "공지 게시 한 번 실패 (재시도)" },
   { key: "wrong_owner", label: "공지 게시 소관 아님 (이관)" },
   { key: "infra_card_empty", label: "인프라 카드 비어 있음 (건너뜀)" },
@@ -223,11 +223,11 @@ const DEMO_OPTIONS: { key: keyof DemoRequest; label: string }[] = [
 // 이름 붙인 장애 시나리오. 총괄 목 모드의 옵션 조합이다 (장애 종류 자체는 결제 장애 plan 하나뿐)
 const SCENARIOS: { id: string; label: string; hint: string; req: DemoRequest }[] = [
   { id: "auto", label: "결제 장애 — 모두 자동 해결", hint: "진단·롤백·공지·보상·손실 리포트까지 사람 없이 끝납니다.", req: {} },
-  { id: "hold", label: "보상 쿠폰 금액 초과 — 사람 판단", hint: "쿠폰 지급이 기준을 넘어 🚩 사람 판단으로 멈춥니다. 승인·거절해 보세요.", req: { hold_coupon: true } },
+  { id: "hold", label: "롤백 확신도 낮음 — 사람 승인", hint: "원인 진단의 확신이 낮아 롤백이 🚩 사람 승인 대기로 멈춥니다. 승인·거절해 보세요.", req: { hold_rollback: true } },
   { id: "retry", label: "공지 게시 실패 — 재시도로 복구", hint: "마케팅 공지가 한 번 실패하고 중앙 Agent가 다시 시도합니다.", req: { fail_marketing: true } },
   { id: "transfer", label: "공지 담당 착오 — 다른 부서로 이관", hint: "공지 요청을 받은 부서가 '소관 아님'으로 돌려보내 중앙 Agent가 이관합니다.", req: { wrong_owner: true } },
   { id: "partial", label: "인프라 AI 연결 끊김 — 일부 건너뛰고 종료", hint: "인프라 카드가 비어 진단·롤백을 건너뛰고 부분 종료합니다.", req: { infra_card_empty: true } },
-  { id: "storm", label: "겹친 사고 — 실패·이관·보류 한꺼번에", hint: "공지 실패, 이관, 쿠폰 보류가 한 사건에서 모두 일어납니다.", req: { hold_coupon: true, fail_marketing: true, wrong_owner: true } },
+  { id: "storm", label: "겹친 사고 — 실패·이관·보류 한꺼번에", hint: "공지 실패, 이관, 롤백 승인 대기가 한 사건에서 모두 일어납니다.", req: { hold_rollback: true, fail_marketing: true, wrong_owner: true } },
   { id: "random", label: "무작위", hint: "위 옵션을 무작위로 섞어 시작합니다.", req: {} },
   { id: "custom", label: "직접 고르기", hint: "아래 옵션을 직접 골라 시작합니다.", req: {} },
 ];
@@ -251,7 +251,7 @@ export default function AgentChat() {
   const [room, setRoom] = useState(ALL_ROOM);
   const [seen, setSeen] = useState<Record<string, number>>({});
   const [scenario, setScenario] = useState("hold");
-  const [demo, setDemo] = useState<DemoRequest>({ hold_coupon: true });
+  const [demo, setDemo] = useState<DemoRequest>({ hold_rollback: true });
   const picked = SCENARIOS.find((s) => s.id === scenario) ?? SCENARIOS[0];
   const [starting, setStarting] = useState(false);
   const [scenarioNames, setScenarioNames] = useState<Record<string, string>>(loadScenarioNames);
