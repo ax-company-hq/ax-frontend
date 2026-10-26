@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from "react-router";
 import { AuditSection } from "@/components/finance/Audit";
 import { ClosingSection } from "@/components/finance/Closing";
 import { Chip, ErrorBox, MetaLine, MockBadge, TONE, Waiting, useResource } from "@/components/finance/bits";
-import { CatbooksPanel, LossReports, SelfTestPanel, TEST_TTL_HOURS, freshTest } from "@/components/finance/Kept";
+import { LossReports, SelfTestPanel, TEST_TTL_HOURS, freshTest } from "@/components/finance/Kept";
 import { PolicySection } from "@/components/finance/Policy";
 import { ReconciliationSection } from "@/components/finance/Reconciliation";
 import { SafetyQueue } from "@/components/finance/SafetyQueue";
@@ -11,7 +11,7 @@ import { SettlementsSection } from "@/components/finance/Settlements";
 import { Link } from "@/lib/nav";
 import {
   FINANCE_SERVER, FINANCE_TABS, SAFETY_SERVER, finance, krw, todoTab,
-  type CatbooksItems, type FinanceKpis, type FinanceTab, type FinanceTodo, type LossReport, type Review, type SelfTest,
+  type FinanceKpis, type FinanceTab, type FinanceTodo, type LossReport, type Review, type SelfTest,
 } from "@/lib/finance";
 
 // 재무 AI 화면 = 캣북스 재무팀. 자동 수집 → 규칙으로 맞춤 → 예외만 사람에게 → 결산·리포트.
@@ -71,18 +71,17 @@ export default function FinancePage() {
 
   const overview = useResource("overview", () => finance.overview(), tick);
 
-  // 서버 상태 · 보류 큐 · 손실 · 캣북스
+  // 서버 상태 · 보류 큐 · 손실
   const [financeUp, setFinanceUp] = useState<boolean | null>(null);
   const [safetyUp, setSafetyUp] = useState<boolean | null>(null);
   const [reviews, setReviews] = useState<Review[] | null>(null);
   const [reviewsError, setReviewsError] = useState<string | null>(null);
   const [losses, setLosses] = useState<LossReport[] | null>(null);
   const [lossError, setLossError] = useState<string | null>(null);
-  const [catbooks, setCatbooks] = useState<CatbooksItems | null>(null);
 
   const loadSide = useCallback(async () => {
-    const [[fh], [sh], [rv, rvErr], [ls, lsErr], [cb]] = await Promise.all([
-      settle(finance.financeHealth()), settle(finance.safetyHealth()), settle(finance.reviews()), settle(finance.lossReports()), settle(finance.catbooksItems()),
+    const [[fh], [sh], [rv, rvErr], [ls, lsErr]] = await Promise.all([
+      settle(finance.financeHealth()), settle(finance.safetyHealth()), settle(finance.reviews()), settle(finance.lossReports()),
     ]);
     setFinanceUp(fh != null);
     setSafetyUp(sh != null);
@@ -90,7 +89,6 @@ export default function FinancePage() {
     setReviewsError(rvErr);
     if (ls) setLosses(ls);
     setLossError(lsErr);
-    if (cb) setCatbooks(cb);
   }, []);
   useEffect(() => { void loadSide(); }, [loadSide, tick]);
 
@@ -111,15 +109,6 @@ export default function FinancePage() {
     try { setTest(await finance.selfTest()); setTestOpen(true); }
     catch { setError(`재무 AI 테스트를 실행하지 못했습니다. ${FINANCE_SERVER}가 켜져 있는지 확인하세요.`); }
     finally { setTesting(false); }
-  }
-
-  const [syncing, setSyncing] = useState(false);
-  async function syncCatbooks() {
-    setSyncing(true);
-    setError(null);
-    try { await finance.catbooksSync(); await loadSide(); }
-    catch { setError(`캣북스에서 가져오지 못했습니다. ${FINANCE_SERVER}가 켜져 있는지 확인하세요.`); }
-    finally { setSyncing(false); }
   }
 
   // 정산 묶음 요청 뒤 보류 큐로 이동
@@ -269,8 +258,6 @@ export default function FinancePage() {
       <SafetyQueue reviews={reviews} error={reviewsError} highlight={highlight} reload={loadSide} />
 
       <LossReports losses={losses} error={lossError} />
-
-      <CatbooksPanel data={catbooks} syncing={syncing} onSync={syncCatbooks} canSync={financeUp !== false} />
     </div>
   );
 }
