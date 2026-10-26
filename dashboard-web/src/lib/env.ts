@@ -14,3 +14,7 @@ export const PLANNING_WEB_URL = import.meta.env.VITE_PLANNING_WEB_URL ?? 'http:/
 /** `on`이면 관리자 화면 앞에 데모 비밀번호 입력이 선다. 실제 인증이 아니다 (고객이 실수로 들어오지 않게 하는 정도) */
 export const ADMIN_LOGIN = import.meta.env.VITE_ADMIN_LOGIN === 'on'
 export const ADMIN_DEMO_PASSWORD = import.meta.env.VITE_ADMIN_DEMO_PASSWORD ?? 'catbooks'
+/** 데이터분석 AI 화면: 데이터 AI(data, 8106) 주소. 기본값 /data-a2a는 Vite 개발 프록시(vite.config.ts, DATA_PROXY_TARGET) */
+export const DATA_A2A_URL = import.meta.env.VITE_DATA_A2A_URL ?? '/data-a2a'
+/** 데이터 AI 직접 조회 토큰. 목 모드 전용(예: mock:dashboard-api). 비어 있으면 KPI 실시간 조회를 하지 않는다. 브라우저 저장소에 두지 않는다 */
+export const DATA_A2A_TOKEN = import.meta.env.VITE_DATA_A2A_TOKEN ?? ''
