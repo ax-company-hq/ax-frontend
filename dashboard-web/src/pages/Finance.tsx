@@ -4,7 +4,7 @@ import { AuditSection } from "@/components/finance/Audit";
 import { ClosingSection } from "@/components/finance/Closing";
 import { Chip, ErrorBox, MetaLine, MockBadge, TONE, Waiting, useResource } from "@/components/finance/bits";
 import { IncidentFinance } from "@/components/finance/Incident";
-import { SelfTestPanel, TEST_TTL_HOURS, freshTest } from "@/components/finance/Kept";
+import { SelfTestPanel } from "@/components/finance/Kept";
 import { PolicySection } from "@/components/finance/Policy";
 import { ReconciliationSection } from "@/components/finance/Reconciliation";
 import { SafetyQueue } from "@/components/finance/SafetyQueue";
@@ -12,15 +12,17 @@ import { SettlementsSection } from "@/components/finance/Settlements";
 import { Link } from "@/lib/nav";
 import {
   FINANCE_SERVER, FINANCE_TABS, SAFETY_SERVER, finance, incidentName, krw, sortIncidents, todoTab,
-  type FinanceKpis, type FinanceTab, type FinanceTodo, type Review, type SelfTest,
+  type FinanceKpis, type FinanceTab, type FinanceTodo, type Review, type SelfTest, type SelfTestLastMeta,
 } from "@/lib/finance";
 
 // 재무 AI 화면 = 캣북스 재무팀. 기본 화면은 시나리오 A(결제 장애)의 "장애 사건 재무"(⑨ 쿠폰 장부 → ⑩ 손실 → ⑰ 사건 후 감사).
-// 평상시 업무(결산·대사·정산·정책·감사 + 장애 손실 리포트)는 두 번째 탭에 그대로 둔다.
+// 평상시 업무(결산·대사·정산·한도 제안·감사)는 두 번째 탭에 둔다. 재무 AI 테스트는 서버가 10분마다 자동으로 한다.
 // 건별 금액 승인은 하지 않는다(건별 검사는 안전 관문). 숫자는 서버가 계산한 값을 그대로 보여 주고, 말만 쉽게 바꾼다.
 // 기준: ax-backend docs/notes/finance/2026-10-23-finance-redesign.md §8·§11·§12
 
 const REFRESH_MS = 30_000;
+/** 재무 AI 테스트 최근 결과를 다시 받는 간격 */
+const SELF_TEST_POLL_MS = 60_000;
 
 const TAB_LABEL: Record<FinanceTab, string> = {
   closing: "① 결산·리포트",
@@ -108,21 +110,30 @@ export default function FinancePage() {
   }, []);
   useEffect(() => { void loadSide(); }, [loadSide, tick]);
 
-  // 재무 AI 테스트
+  // 재무 AI 테스트: 서버가 10분마다 자동으로 하고, 화면은 1분마다 최근 결과를 받는다
   const [test, setTest] = useState<SelfTest | null>(null);
+  const [testMeta, setTestMeta] = useState<SelfTestLastMeta | null>(null);
+  const [testLoaded, setTestLoaded] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testOpen, setTestOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  useEffect(() => { finance.lastSelfTest().then((t) => setTest(freshTest(t))).catch(() => undefined); }, []);
-  useEffect(() => {
-    // 화면을 켜 둔 채 12시간이 지나도 지난 결과를 지운다
-    const t = setInterval(() => setTest((cur) => freshTest(cur)), 60_000);
-    return () => clearInterval(t);
+  const loadLastTest = useCallback(async () => {
+    try {
+      const res = await finance.lastSelfTest();
+      setTest(res.data ?? null);
+      setTestMeta(res.meta ?? null);
+    } catch { /* 서버가 꺼져 있으면 위의 연결 안내가 대신 보인다 */ }
+    finally { setTestLoaded(true); }
   }, []);
+  useEffect(() => {
+    void loadLastTest();
+    const t = setInterval(() => void loadLastTest(), SELF_TEST_POLL_MS);
+    return () => clearInterval(t);
+  }, [loadLastTest]);
   async function runTest() {
     setTesting(true);
     setError(null);
-    try { setTest(await finance.selfTest()); setTestOpen(true); }
+    try { setTest(await finance.selfTest()); setTestOpen(true); void loadLastTest(); }
     catch { setError(`재무 AI 테스트를 실행하지 못했습니다. ${FINANCE_SERVER}가 켜져 있는지 확인하세요.`); }
     finally { setTesting(false); }
   }
@@ -157,7 +168,6 @@ export default function FinancePage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 text-xs sm:ml-auto">
-          <button className="btn-primary" onClick={runTest} disabled={testing || financeUp === false}>{testing ? "테스트하는 중…" : "재무 AI 테스트"}</button>
           <button className="btn-ghost" onClick={bump}>새로고침</button>
           {safetyUp != null && <Chip label={safetyUp ? "안전 장치 켜짐" : "안전 장치 꺼짐"} tone={safetyUp ? TONE.ok : TONE.bad} />}
           {financeUp != null && <Chip label={financeUp ? "재무 AI 켜짐" : "재무 AI 꺼짐"} tone={financeUp ? TONE.ok : TONE.bad} />}
@@ -167,7 +177,8 @@ export default function FinancePage() {
       <details className="rounded-2xl border border-ink-100 bg-surface px-4 py-3 text-sm sm:px-5">
         <summary className="cursor-pointer font-semibold text-ink-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500">처음이라면: 관리자가 할 일</summary>
         <ol className="mt-3 list-decimal space-y-1.5 pl-5 text-ink-700">
-          <li><b>사건 고르기</b>: <b>장애 사건 재무</b> 탭에서 살펴볼 장애 사건을 고릅니다. 가장 최근 사건이 먼저 열려 있습니다. (아침에는 먼저 <b>재무 AI 테스트</b>를 눌러 초록색인지 확인하세요.)</li>
+          <li><b>재무 AI 테스트 확인</b>: 맨 위 <b>재무 AI 테스트</b>가 초록색(정상)인지 봅니다. 서버가 10분마다 스스로 테스트하므로 누를 필요는 없습니다. "늦어지고 있습니다" 경고가 보이면 재무 AI 서버를 확인합니다.</li>
+          <li><b>사건 고르기</b>: <b>장애 사건 재무</b> 탭 위쪽 사건 탭에서 살펴볼 사건을 고릅니다. 가장 최근 사건이 먼저 열려 있고, 오래된 사건은 끝의 <b>이전 사건</b> 목록에 있습니다.</li>
           <li><b>손실 확인</b>: 피해(데이터 AI가 센 숫자), 보상 쿠폰, <b>총 손실 = 피해 + 보상</b>, 보상 한도를 얼마나 썼는지 봅니다. 재무 단계 ⑨·⑩이 <b>끝남</b>이면 장부와 손실 리포트가 준비된 것입니다.</li>
           <li><b>감사 결과 확인</b>: ⑰ 사건 후 감사에 ✗가 있으면 관련 기록 번호를 재무 담당자에게 알립니다. 영향 고객이 아닌 사람이 쿠폰을 받았거나, 한 사람이 두 번 받았거나, 한도를 넘었다는 뜻입니다.</li>
           <li><b>보류 큐 결정</b>: 판정이 <b>C</b>인 쿠폰은 아래 <b>안전 장치 보류 큐</b>에서 진행 또는 멈춤을 누릅니다. 10분 안에 아무도 정하지 않으면 자동으로 취소됩니다.</li>
@@ -178,11 +189,7 @@ export default function FinancePage() {
         </p>
       </details>
 
-      {test ? <SelfTestPanel test={test} open={testOpen} /> : (
-        <p className="rounded-2xl border border-dashed border-ink-300 px-4 py-3 text-sm text-ink-500 sm:px-5">
-          최근 {TEST_TTL_HOURS}시간 안에 한 테스트가 없습니다. <b>재무 AI 테스트</b>를 눌러 재무 AI가 제대로 계산하고 연결돼 있는지 확인하세요. 가짜 자료로 점검해서 실제 기록이나 돈에는 영향이 없습니다.
-        </p>
-      )}
+      <SelfTestPanel test={test} meta={testMeta} loaded={testLoaded} open={testOpen} running={testing} disabled={financeUp === false} onRunNow={runTest} />
 
       {(financeUp === false || safetyUp === false) && (
         <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm font-medium text-red-800">

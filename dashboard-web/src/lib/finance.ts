@@ -273,6 +273,16 @@ export interface SelfTest {
   total: number;
   duration_ms: number;
   ran_at: string;
+  /** 자동(10분마다) / 사람이 직접. 예전 서버에는 없다 */
+  trigger?: "auto" | "manual";
+}
+/** GET /self-test/last 의 meta. 새 필드는 예전 서버에 없을 수 있다 */
+export interface SelfTestLastMeta {
+  /** 다음 자동 테스트 시각(ISO). 자동 테스트가 꺼져 있으면 null */
+  next_run_at?: string | null;
+  /** 자동 테스트 간격(초) */
+  interval_seconds?: number;
+  ttl_hours?: number;
 }
 
 // ---------------------------------------------------------------- 호출
@@ -370,9 +380,10 @@ export const finance = {
   // 유지
   marketOps: () => data(fin<{ data: MarketOp[] }>("/api/finance/market-ops")),
   lossReports: () => data(fin<{ data: LossReport[] }>("/api/finance/loss-reports")),
-  /** 재무 AI 테스트 버튼: 가짜 자료로 점검하고 연결을 확인한다(상태를 바꾸지 않음) */
+  /** 재무 AI 테스트를 지금 한 번 더 한다(서버는 10분마다 자동으로 한다). 가짜 자료로 점검해 상태를 바꾸지 않음 */
   selfTest: () => data(fin<{ data: SelfTest }>("/api/finance/self-test")),
-  lastSelfTest: () => data(fin<{ data: SelfTest | null }>("/api/finance/self-test/last")),
+  /** 가장 최근 테스트 결과(자동·직접) + 다음 자동 테스트 시각 */
+  lastSelfTest: () => fin<{ data: SelfTest | null; meta?: SelfTestLastMeta }>("/api/finance/self-test/last"),
   // 안전 장치 보류 큐 (정산 묶음 지급 승인 등 C 등급)
   reviews: () => data(saf<{ data: Review[] }>("/api/safety/reviews")),
   /** C 보류 결정. 사람 토큰만 받는다 (에이전트 토큰은 safety가 거부). */

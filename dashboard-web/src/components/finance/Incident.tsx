@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { shortDateTime } from "@/lib/format";
 import {
   barWidth, finance, incidentName, krw, ledgerSourceKo, sortIncidents,
@@ -44,33 +44,113 @@ function checkChip(ok: boolean | null) {
   return <Chip label="감사 전" tone={TONE.muted} />;
 }
 
-// ---------------------------------------------------------------- 사건 고르기
-function IncidentPicker({ list, selected, onSelect }: { list: IncidentSummary[]; selected: string | null; onSelect: (id: string) => void }) {
+// ---------------------------------------------------------------- 사건 고르기 (탭 + 이전 사건 목록)
+/** 탭으로 보여 줄 최근 사건 수. 좁은 화면(휴대폰)에서는 줄이고 나머지는 "이전 사건" 목록으로 */
+const TABS_WIDE = 5;
+const TABS_NARROW = 2;
+const NARROW_QUERY = "(max-width: 639px)";
+
+function useNarrow() {
+  const get = () => typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia(NARROW_QUERY).matches;
+  const [narrow, setNarrow] = useState(get);
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return;
+    const mq = window.matchMedia(NARROW_QUERY);
+    const on = () => setNarrow(mq.matches);
+    on();
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, []);
+  return narrow;
+}
+
+/** "10/25" 같은 짧은 날짜 */
+function shortDay(iso: string | null) {
+  if (!iso) return "날짜 모름";
+  const d = new Date(iso);
+  return `${d.getMonth() + 1}/${d.getDate()}`;
+}
+
+/** 감사 ✗ = 빨강, C 보류 = 주황. 둘 다 아니면 표시 없음 */
+function statusDot(i: IncidentSummary): { cls: string; label: string } | null {
+  if (i.checks_ok === false) return { cls: "bg-red-500", label: i.held_count > 0 ? `감사에서 확인할 점, 보류 쿠폰 ${i.held_count}장` : "감사에서 확인할 점" };
+  if (i.held_count > 0) return { cls: "bg-amber-500", label: `보류 쿠폰 ${i.held_count}장` };
+  return null;
+}
+
+const tabId = (contextId: string) => `inc-tab-${contextId}`;
+const PANEL_ID = "incident-panel";
+
+function IncidentTabs({ recent, older, selected, onSelect }: { recent: IncidentSummary[]; older: IncidentSummary[]; selected: string | null; onSelect: (id: string) => void }) {
+  const olderSelected = older.some((i) => i.context_id === selected);
+  const recentSelected = recent.some((i) => i.context_id === selected);
+  const refs = useRef<(HTMLButtonElement | null)[]>([]);
+
+  // ← → Home End 로 탭 사이를 옮긴다(옮기면 바로 그 사건을 연다)
+  function onKey(e: KeyboardEvent<HTMLButtonElement>, idx: number) {
+    const last = recent.length - 1;
+    const to = e.key === "ArrowRight" ? (idx === last ? 0 : idx + 1)
+      : e.key === "ArrowLeft" ? (idx === 0 ? last : idx - 1)
+        : e.key === "Home" ? 0 : e.key === "End" ? last : null;
+    if (to == null) return;
+    e.preventDefault();
+    refs.current[to]?.focus();
+    onSelect(recent[to].context_id);
+  }
+
   return (
-    <ul className="space-y-2" aria-label="장애 사건 목록">
-      {list.map((i) => {
-        const on = i.context_id === selected;
-        return (
-          <li key={i.context_id}>
-            <button type="button" aria-pressed={on} onClick={() => onSelect(i.context_id)}
-              className={`w-full rounded-2xl px-4 py-3 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500 ${on ? "bg-brand-50 ring-2 ring-brand-500" : "bg-surface ring-1 ring-ink-100 hover:ring-brand-100"}`}>
-              <div className="flex flex-wrap items-center gap-2">
-                <b className="text-sm text-ink-900">{incidentName(i.context_id)}</b>
-                {componentKo(i.component) && <span className="text-xs text-ink-500">{componentKo(i.component)} 장애</span>}
-                <span className="ml-auto text-[11px] text-ink-500">{i.opened_at ? shortDateTime(i.opened_at) : "시작 시각 모름"}</span>
-              </div>
-              <p className="mt-1.5 text-[11px] text-ink-500">총 손실</p>
-              <p className={`text-lg font-bold tabular-nums ${i.loss_total == null ? "text-sm text-ink-500" : "text-red-700"}`}>{krw(i.loss_total)}</p>
-              <p className="mt-0.5 text-xs tabular-nums text-ink-700">피해 {krw(i.damage_amount)} + 보상 {krw(i.compensation_total)} ({i.coupon_count}장)</p>
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {checkChip(i.checks_ok)}
-                {i.held_count > 0 && <Chip label={`보류 쿠폰 ${i.held_count}장`} tone={TONE.warn} />}
-              </div>
+    <div className="flex flex-wrap items-center gap-2">
+      <div role="tablist" aria-label="장애 사건 (최근 먼저)" className="flex min-w-0 flex-wrap gap-1">
+        {recent.map((i, idx) => {
+          const on = i.context_id === selected;
+          const dot = statusDot(i);
+          return (
+            <button key={i.context_id} ref={(el) => { refs.current[idx] = el; }} type="button" role="tab" id={tabId(i.context_id)}
+              aria-selected={on} aria-controls={PANEL_ID} tabIndex={on || (!recentSelected && idx === 0) ? 0 : -1}
+              onClick={() => onSelect(i.context_id)} onKeyDown={(e) => onKey(e, idx)}
+              className={`inline-flex max-w-full items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500 ${on ? "bg-brand-600 text-white" : "bg-surface text-ink-700 ring-1 ring-ink-100 hover:bg-ink-100"}`}>
+              <span className="truncate">{incidentName(i.context_id)}</span>
+              <span className={`shrink-0 text-xs tabular-nums ${on ? "text-white/80" : "text-ink-500"}`}>{shortDay(i.opened_at)}</span>
+              {dot && <span className={`h-2 w-2 shrink-0 rounded-full ${dot.cls} ${on ? "ring-2 ring-white" : ""}`} role="img" aria-label={dot.label} title={dot.label} />}
             </button>
-          </li>
-        );
-      })}
-    </ul>
+          );
+        })}
+      </div>
+      {older.length > 0 && (
+        <label className="min-w-0 max-w-full">
+          <span className="sr-only">이전 사건 고르기</span>
+          <select value={olderSelected ? selected ?? "" : ""} onChange={(e) => { if (e.target.value) onSelect(e.target.value); }}
+            className={`max-w-full rounded-full border-0 py-2 pl-4 pr-8 text-sm font-medium ring-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500 ${olderSelected ? "bg-brand-600 text-white ring-brand-600" : "bg-surface text-ink-700 ring-ink-100"}`}>
+            <option value="">이전 사건 {older.length}건</option>
+            {older.map((i) => {
+              const dot = statusDot(i);
+              return (
+                <option key={i.context_id} value={i.context_id}>
+                  {incidentName(i.context_id)} · {shortDay(i.opened_at)}{dot ? ` · ${dot.label}` : ""}
+                </option>
+              );
+            })}
+          </select>
+        </label>
+      )}
+    </div>
+  );
+}
+
+/** 상세 맨 위 요약: 총 손실, 피해 + 보상, 감사 상태 (사건 목록 값 그대로) */
+function SummaryStrip({ s }: { s: IncidentSummary }) {
+  return (
+    <div className="flex flex-wrap items-end gap-x-6 gap-y-2 rounded-2xl bg-surface-2 px-4 py-3">
+      <div>
+        <p className="text-[11px] text-ink-500">총 손실</p>
+        <p className={`font-bold tabular-nums ${s.loss_total == null ? "text-sm text-ink-500" : "text-2xl text-red-700"}`}>{krw(s.loss_total)}</p>
+      </div>
+      <p className="text-sm tabular-nums text-ink-700">피해 {krw(s.damage_amount)} + 보상 {krw(s.compensation_total)} <span className="text-ink-500">({s.coupon_count}장)</span></p>
+      <div className="flex flex-wrap gap-1.5">
+        {checkChip(s.checks_ok)}
+        {s.held_count > 0 && <Chip label={`보류 쿠폰 ${s.held_count}장`} tone={TONE.warn} />}
+      </div>
+    </div>
   );
 }
 
@@ -298,7 +378,7 @@ function NotOurJob() {
 }
 
 // ---------------------------------------------------------------- 사건 한 건
-function IncidentDetailView({ id, tick, onGoToQueue }: { id: string; tick: number; onGoToQueue: (reviewId: string | null) => void }) {
+function IncidentDetailView({ id, summary, tick, onGoToQueue }: { id: string; summary: IncidentSummary | null; tick: number; onGoToQueue: (reviewId: string | null) => void }) {
   const res = useResource(`incident:${id}`, () => finance.incident(id), tick);
   const meta = res.env?.meta;
   return (
@@ -312,6 +392,7 @@ function IncidentDetailView({ id, tick, onGoToQueue }: { id: string; tick: numbe
       {res.env?.data.window && (
         <p className="-mt-3 text-xs text-ink-500">장애 시간 {shortDateTime(res.env.data.window.from)} ~ {shortDateTime(res.env.data.window.to)}</p>
       )}
+      {summary && <SummaryStrip s={summary} />}
       <MetaLine meta={meta} />
       <ResourceBody res={res}>
         {(d) => (
@@ -337,6 +418,14 @@ export function IncidentFinance({ list, selected, onSelect, tick, onGoToQueue }:
   onGoToQueue: (reviewId: string | null) => void;
 }) {
   const items = sortIncidents(list.env?.data ?? []);
+  const narrow = useNarrow();
+  const tabCount = narrow ? TABS_NARROW : TABS_WIDE;
+  const recent = items.slice(0, tabCount);
+  const older = items.slice(tabCount);
+  const selectedSummary = items.find((i) => i.context_id === selected) ?? null;
+  const panelLabel = selected && recent.some((i) => i.context_id === selected)
+    ? { "aria-labelledby": tabId(selected) }
+    : { "aria-label": selected ? incidentName(selected) : "장애 사건" };
   const src = list.env?.meta.ledger_source ? ledgerSourceKo(list.env.meta.ledger_source) : null;
   return (
     <section id="incident-finance" aria-labelledby="incident-finance-title" className="card scroll-mt-4 p-4 sm:p-5">
@@ -364,14 +453,14 @@ export function IncidentFinance({ list, selected, onSelect, tick, onGoToQueue }:
                 아직 재무가 아는 장애 사건이 없습니다. 장애가 나서 총괄 AI가 사건(<code>ctx_inc_…</code>)을 열고 보상 쿠폰이 나가면 여기에 나타납니다.
               </Empty>
             ) : (
-              <div className="grid gap-5 lg:grid-cols-[minmax(240px,300px)_1fr]">
-                <div className="lg:max-h-[78vh] lg:overflow-y-auto lg:pr-1">
-                  <p className="mb-2 text-xs font-medium text-ink-500">사건 고르기 · {items.length}건 (최근 먼저)</p>
-                  <IncidentPicker list={items} selected={selected} onSelect={onSelect} />
-                </div>
-                {selected
-                  ? <IncidentDetailView key={selected} id={selected} tick={tick} onGoToQueue={onGoToQueue} />
-                  : <Empty>왼쪽에서 사건을 고르세요.</Empty>}
+              <div className="space-y-4">
+                <IncidentTabs recent={recent} older={older} selected={selected} onSelect={onSelect} />
+                {selected ? (
+                  <div role="tabpanel" id={PANEL_ID} tabIndex={0} {...panelLabel}
+                    className="rounded-2xl border border-ink-100 p-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500 sm:p-5">
+                    <IncidentDetailView key={selected} id={selected} summary={selectedSummary} tick={tick} onGoToQueue={onGoToQueue} />
+                  </div>
+                ) : <Empty>위에서 사건을 고르세요.</Empty>}
               </div>
             )}
           </>
