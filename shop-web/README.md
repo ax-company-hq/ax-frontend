@@ -15,6 +15,7 @@
 | `/login` | 데모 로그인 |
 | `/orders`, `/orders/:id` | 주문 내역, 주문 상세(클레임 신청·후기) |
 | `/support` | 1:1 문의 |
+| `/admin/orchestrator` | 관리자: 총괄 에이전트 사건 목록·상세(읽기 전용). **개발용 관리자 모드**일 때만 보임 |
 
 ## 2. 실행 방법
 레포 루트에서:
@@ -26,6 +27,13 @@ npm run build -w shop-web
 ```
 
 API 주소는 루트 `.env`의 `VITE_SHOP_API_URL`로 정한다.
+
+### 관리자 탭(개발용, 임시)
+`VITE_SHOP_ADMIN_TOKEN`에 `mock:admin`을 넣으면(목 모드 전용) 우측 상단에 **관리자** 탭이 나타나고 `/admin/orchestrator`에서 총괄의 사건 흐름을 읽기 전용으로 본다. 비우면(기본) 탭도 화면도 없다.
+- 화면은 총괄을 직접 부르지 않고 shop-api `GET /api/shop/admin/orchestrator/incidents`만 부른다(총괄 주소는 shop-api의 `SHOP_ORCHESTRATOR_URL`).
+- catbooks 백엔드로 판매 화면을 띄울 때는 `VITE_SHOP_ADMIN_API_URL=http://localhost:8010`(shop-api)을 같이 넣는다. 비우면 `VITE_SHOP_API_URL`을 쓴다.
+- 토큰은 환경변수에서만 오고 브라우저 저장소에는 두지 않는다. 운영 환경에는 값을 넣지 않는다.
+- 진짜 관리자 로그인과 역할(소유자·공동소유자·분야 관리자·에이전트)은 사람 인증(#265·#295)이 끝난 뒤 이 자리를 대신한다.
 
 ### catbooks 백엔드로 바로 띄워 보기
 ax-backend에 API가 생기기 전에는 catbooks 백엔드(FastAPI, 8000) 하나로 두 앱을 모두 돌릴 수 있다.
