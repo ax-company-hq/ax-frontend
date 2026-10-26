@@ -36,7 +36,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
   const mock = health?.llm_provider === "mock";
 
   return (
-    <div className="flex h-screen bg-app text-ink-900">
+    <div className="flex h-screen overflow-hidden bg-app text-ink-900">
       <div className="flex min-w-0 flex-1 overflow-hidden bg-app">
         <nav className="flex w-[76px] shrink-0 flex-col items-center gap-2 border-r border-ink-100 py-6" aria-label="주 메뉴">
           <Link href="/" className="mb-6" aria-label="캣북스 상담원 홈"><LogoMark /></Link>
@@ -76,7 +76,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
               <Link href={SHOP_WEB_URL} className="rounded-full border border-ink-100 px-3 py-1.5 text-xs font-medium hover:bg-ink-100">쇼핑몰 보기 ↗</Link>
             </div>
           </header>
-          <main className="min-h-0 flex-1 overflow-y-auto">{children}</main>
+          <main className="relative min-h-0 flex-1 overflow-y-auto">{children}</main>
         </div>
       </div>
     </div>
