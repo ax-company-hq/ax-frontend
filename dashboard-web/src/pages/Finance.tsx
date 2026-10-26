@@ -4,7 +4,7 @@ import { AuditSection } from "@/components/finance/Audit";
 import { ClosingSection } from "@/components/finance/Closing";
 import { Chip, ErrorBox, MetaLine, MockBadge, TONE, Waiting, useResource } from "@/components/finance/bits";
 import { IncidentFinance } from "@/components/finance/Incident";
-import { LossReports, SelfTestPanel, TEST_TTL_HOURS, freshTest } from "@/components/finance/Kept";
+import { SelfTestPanel, TEST_TTL_HOURS, freshTest } from "@/components/finance/Kept";
 import { PolicySection } from "@/components/finance/Policy";
 import { ReconciliationSection } from "@/components/finance/Reconciliation";
 import { SafetyQueue } from "@/components/finance/SafetyQueue";
@@ -12,7 +12,7 @@ import { SettlementsSection } from "@/components/finance/Settlements";
 import { Link } from "@/lib/nav";
 import {
   FINANCE_SERVER, FINANCE_TABS, SAFETY_SERVER, finance, incidentName, krw, sortIncidents, todoTab,
-  type FinanceKpis, type FinanceTab, type FinanceTodo, type LossReport, type Review, type SelfTest,
+  type FinanceKpis, type FinanceTab, type FinanceTodo, type Review, type SelfTest,
 } from "@/lib/finance";
 
 // 재무 AI 화면 = 캣북스 재무팀. 기본 화면은 시나리오 A(결제 장애)의 "장애 사건 재무"(⑨ 쿠폰 장부 → ⑩ 손실 → ⑰ 사건 후 감사).
@@ -96,19 +96,15 @@ export default function FinancePage() {
   const [safetyUp, setSafetyUp] = useState<boolean | null>(null);
   const [reviews, setReviews] = useState<Review[] | null>(null);
   const [reviewsError, setReviewsError] = useState<string | null>(null);
-  const [losses, setLosses] = useState<LossReport[] | null>(null);
-  const [lossError, setLossError] = useState<string | null>(null);
 
   const loadSide = useCallback(async () => {
-    const [[fh], [sh], [rv, rvErr], [ls, lsErr]] = await Promise.all([
-      settle(finance.financeHealth()), settle(finance.safetyHealth()), settle(finance.reviews()), settle(finance.lossReports()),
+    const [[fh], [sh], [rv, rvErr]] = await Promise.all([
+      settle(finance.financeHealth()), settle(finance.safetyHealth()), settle(finance.reviews()),
     ]);
     setFinanceUp(fh != null);
     setSafetyUp(sh != null);
     if (rv) setReviews(rv);
     setReviewsError(rvErr);
-    if (ls) setLosses(ls);
-    setLossError(lsErr);
   }, []);
   useEffect(() => { void loadSide(); }, [loadSide, tick]);
 
@@ -150,7 +146,7 @@ export default function FinancePage() {
   const anyTodoLoaded = overview.env || reviews || incidents.env;
 
   return (
-    <div className="max-w-[1320px] space-y-6 px-4 pb-12 pt-2 sm:space-y-8 sm:px-8">
+    <div className="w-full space-y-6 px-4 pb-12 pt-2 sm:space-y-8 sm:px-8">
       {/* 머리말 */}
       <header className="flex flex-wrap items-end gap-3">
         <div className="min-w-0">
@@ -321,7 +317,6 @@ export default function FinancePage() {
         </div>
       </div>
 
-      <LossReports losses={losses} error={lossError} />
       </div>
       )}
 

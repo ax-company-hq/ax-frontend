@@ -1,7 +1,7 @@
-import { shortDateTime, won } from "@/lib/format";
-import type { LossReport, SelfTest } from "@/lib/finance";
+import { shortDateTime } from "@/lib/format";
+import type { SelfTest } from "@/lib/finance";
 
-// 예전 재무 화면에서 그대로 가져온 부분: 재무 AI 테스트 결과, 장애 손실 리포트.
+// 예전 재무 화면에서 그대로 가져온 부분: 재무 AI 테스트 결과. (장애 손실은 장애 사건 재무 탭에서 사건별로 본다)
 
 export const TEST_TTL_HOURS = 12; // 서버와 같다. 지난 결과는 믿지 않고 다시 테스트하게 한다
 export const freshTest = (t: SelfTest | null) =>
@@ -51,36 +51,3 @@ export function SelfTestPanel({ test, open }: { test: SelfTest; open: boolean })
 }
 
 // ---------------------------------------------------------------- 장애 손실 리포트 (① 결산·리포트의 일부)
-export function LossReports({ losses, error }: { losses: LossReport[] | null; error: string | null }) {
-  return (
-    <section aria-labelledby="losses" className="space-y-3">
-      <div>
-        <h2 id="losses" className="text-base font-semibold text-ink-900">장애로 생긴 손실</h2>
-        <p className="mt-0.5 text-xs text-ink-500">피해 숫자는 데이터 AI가 센 값을 그대로 쓰고, 재무 AI는 보상으로 나간 돈을 더해 총 손실을 냅니다.</p>
-      </div>
-      {error && !losses && <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-800">{error}</p>}
-      {losses && (
-        <div className="grid gap-4 md:grid-cols-2">
-          {losses.map((l) => (
-            <article key={l.context_id} className="card p-5">
-              <div className="flex items-baseline justify-between gap-2">
-                <h3 className="font-semibold">장애 {l.context_id.replace("ctx_inc_", "#")}</h3>
-                <span className="text-xs text-ink-500">{shortDateTime(l.at)} 정리</span>
-              </div>
-              <p className="mt-2 text-xs text-ink-500">총 손실</p>
-              <p className="text-3xl font-bold tabular-nums text-red-700">{l.total_loss == null ? "확인할 수 없음" : won(l.total_loss)}</p>
-              <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-1 border-t border-ink-100 pt-3 text-sm">
-                <dt className="text-ink-500">실패한 주문</dt><dd className="text-right tabular-nums">{l.failed_orders == null ? "확인할 수 없음" : `${l.failed_orders}건`}</dd>
-                <dt className="text-ink-500">피해 고객</dt><dd className="text-right tabular-nums">{l.affected_customers == null ? "확인할 수 없음" : `${l.affected_customers}명`}</dd>
-                <dt className="text-ink-500">피해 금액</dt><dd className="text-right tabular-nums">{l.lost_amount == null ? "확인할 수 없음" : won(l.lost_amount)}</dd>
-                <dt className="text-ink-500">보상으로 나간 돈</dt><dd className="text-right tabular-nums">{won(l.compensation_total)} ({l.compensation_coupon_count}장)</dd>
-                <dt className="text-ink-500">피해 대비 보상</dt><dd className="text-right tabular-nums">{l.lost_amount ? `${Math.round((l.compensation_total / l.lost_amount) * 100)}%` : "확인할 수 없음"}</dd>
-              </dl>
-            </article>
-          ))}
-          {!losses.length && <p className="card p-5 text-sm text-ink-500">아직 정리한 손실이 없습니다. 장애가 끝나면 총괄 AI가 재무 AI에 손실 정리를 요청합니다.</p>}
-        </div>
-      )}
-    </section>
-  );
-}
