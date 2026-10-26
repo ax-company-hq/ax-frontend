@@ -124,6 +124,10 @@ export function ShopShell({ children }: { children: ReactNode }) {
             <p className="mt-1 leading-relaxed">상품·저자·출판사는 모두 가상 데이터입니다. 상담 답변은 {health?.llm_provider === "anthropic" ? "Claude" : "오프라인 규칙(mock)"}으로 생성되고, 환불 판정은 항상 규칙 엔진이 합니다.</p>
           </div>
         </div>
+        <nav aria-label="약관" className="mx-auto flex max-w-6xl gap-4 px-4 pb-6">
+          <Link href="/terms" className="font-semibold text-ink-700 hover:underline">이용약관</Link>
+          <Link href="/privacy" className="font-semibold text-ink-700 hover:underline">개인정보처리방침</Link>
+        </nav>
       </footer>
     </div>
   );
