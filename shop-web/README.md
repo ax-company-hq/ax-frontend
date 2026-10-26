@@ -15,6 +15,7 @@
 | `/login` | 데모 로그인 |
 | `/orders`, `/orders/:id` | 주문 내역, 주문 상세(클레임 신청·후기) |
 | `/support` | 1:1 문의 |
+| `/admin/departments` | 관리자: 부서 카드·사용량(총괄이 부서를 부른 횟수·오류·성공률·평균 응답, skill별 표, 최근 호출). 읽기 전용, 개발용 관리자 모드일 때만 보임. shop-api `GET /api/shop/admin/orchestrator/departments`(요청 ax-backend#378 처리 전에는 404 안내가 나옴) |
 | `/admin/orchestrator` | 관리자: 총괄 에이전트 사건 목록·상세(읽기 전용). **개발용 관리자 모드**일 때만 보임 |
 
 ## 2. 실행 방법

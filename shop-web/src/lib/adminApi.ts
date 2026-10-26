@@ -1,5 +1,6 @@
 import { ApiError } from "./apiError";
 import { ADMIN_API_URL, ADMIN_DEMO_TOKEN } from "./env";
+import type { Department } from "./adminDeptTypes";
 import type { Incident } from "./adminTypes";
 
 // 관리자 화면 → shop-api 관리 API. 총괄은 shop-api가 읽어 와서 전달한다(총괄을 직접 부르지 않는다).
@@ -24,5 +25,6 @@ async function adminGet<T>(path: string): Promise<{ data: T; meta: Record<string
 
 export const adminApi = {
   incidents: () => adminGet<Incident[]>("/api/shop/admin/orchestrator/incidents"),
+  departments: () => adminGet<Department[]>("/api/shop/admin/orchestrator/departments"),
   incident: (contextId: string) => adminGet<Incident>(`/api/shop/admin/orchestrator/incidents/${encodeURIComponent(contextId)}`),
 };

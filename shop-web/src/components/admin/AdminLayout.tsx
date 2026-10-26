@@ -1,7 +1,10 @@
 import { Link, usePathname } from "@/lib/nav";
 import type { ReactNode } from "react";
 
-const MENU = [{ href: "/admin/orchestrator", label: "총괄 에이전트" }];
+const MENU = [
+  { href: "/admin/orchestrator", label: "총괄 에이전트" },
+  { href: "/admin/departments", label: "부서 카드·사용량" },
+];
 
 export function AdminLayout({ children }: { children: ReactNode }) {
   const path = usePathname();
