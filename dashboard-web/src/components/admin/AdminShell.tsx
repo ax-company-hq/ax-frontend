@@ -4,7 +4,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { api } from "@/lib/api";
 import { PLANNING_WEB_URL, SHOP_WEB_URL } from "@/lib/env";
 import type { Health } from "@/lib/types";
-import { IconAgents, IconBell, IconBook, IconBox, IconChart, IconChat, IconDashboard, IconReceipt, IconSearch, IconShield, IconStar } from "../icons";
+import { IconAgents, IconBell, IconBook, IconBox, IconChart, IconChat, IconDashboard, IconReceipt, IconSearch, IconShield, IconStar, IconUsers } from "../icons";
 import { ThemeToggle } from "../ThemeToggle";
 
 const NAV = [
@@ -16,6 +16,7 @@ const NAV = [
   { href: "/kb", label: "지식베이스", Icon: IconBook },
   { href: "/finance", label: "재무 AI", Icon: IconShield },
   { href: "/data", label: "데이터분석 AI", Icon: IconChart },
+  { href: "/hr", label: "인사 AI", Icon: IconUsers },
   { href: "/agents/chat", label: "AI 대화방", Icon: IconAgents },
 ];
 
