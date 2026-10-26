@@ -2,7 +2,7 @@ import { Link } from "@/lib/nav";
 import { usePathname } from "@/lib/nav";
 import { useEffect, useState, type ReactNode } from "react";
 import { api } from "@/lib/api";
-import { SHOP_WEB_URL } from "@/lib/env";
+import { PLANNING_WEB_URL, SHOP_WEB_URL } from "@/lib/env";
 import type { Health } from "@/lib/types";
 import { IconAgents, IconBell, IconBook, IconBox, IconChat, IconDashboard, IconReceipt, IconSearch, IconShield, IconStar } from "../icons";
 import { ThemeToggle } from "../ThemeToggle";
@@ -71,7 +71,9 @@ export function AdminShell({ children }: { children: ReactNode }) {
               )}
               <Link href="/console" title="문의 찾기" aria-label="문의 찾기"><IconSearch size={20} /></Link>
               <IconBell size={20} />
-              <Link href={SHOP_WEB_URL} className="rounded-full border border-ink-100 px-3 py-1.5 text-xs font-medium hover:bg-ink-100">쇼핑몰 보기 ↗</Link>
+              {/* 앱 사이 링크는 일반 <a>: Link는 http(s)가 아니면 라우터 경로로 처리해 basename(/admin) 아래에서 깨진다 */}
+              <a href={PLANNING_WEB_URL} className="rounded-full border border-ink-100 px-3 py-1.5 text-xs font-medium hover:bg-ink-100">기획개발 ↗</a>
+              <a href={SHOP_WEB_URL} className="rounded-full border border-ink-100 px-3 py-1.5 text-xs font-medium hover:bg-ink-100">쇼핑몰 보기 ↗</a>
             </div>
           </header>
           <main className="relative min-h-0 flex-1 overflow-y-auto">{children}</main>

@@ -5,11 +5,14 @@ import { BrowserRouter } from 'react-router'
 import 'pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css'
 import './styles.css'
 import { App } from './App'
+import { DemoGate } from './components/admin/DemoGate'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <BrowserRouter>
-      <App />
+    <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, '')}>
+      <DemoGate>
+        <App />
+      </DemoGate>
     </BrowserRouter>
   </StrictMode>,
 )
