@@ -28,7 +28,7 @@ function LogoMark() {
   );
 }
 
-/** Agent console frame: left icon rail + underline tabs, inside a rounded container on the canvas. */
+/** Agent console frame: left icon rail + underline tabs, filling the whole window. */
 export function AdminShell({ children }: { children: ReactNode }) {
   const path = usePathname();
   const [health, setHealth] = useState<Health | null>(null);
@@ -36,8 +36,8 @@ export function AdminShell({ children }: { children: ReactNode }) {
   const mock = health?.llm_provider === "mock";
 
   return (
-    <div className="flex h-screen bg-canvas p-3 text-ink-900 lg:p-6">
-      <div className="flex min-w-0 flex-1 overflow-hidden rounded-[28px] bg-app shadow-[0_20px_60px_-30px_rgba(30,30,60,0.35)]">
+    <div className="flex h-screen bg-app text-ink-900">
+      <div className="flex min-w-0 flex-1 overflow-hidden bg-app">
         <nav className="flex w-[76px] shrink-0 flex-col items-center gap-2 border-r border-ink-100 py-6" aria-label="주 메뉴">
           <Link href="/" className="mb-6" aria-label="캣북스 상담원 홈"><LogoMark /></Link>
           {NAV.map(({ href, label, Icon }) => {
