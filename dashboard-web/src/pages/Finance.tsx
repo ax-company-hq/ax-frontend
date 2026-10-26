@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router";
 import { AuditSection } from "@/components/finance/Audit";
 import { ClosingSection } from "@/components/finance/Closing";
 import { Chip, ErrorBox, MetaLine, MockBadge, TONE, Waiting, useResource } from "@/components/finance/bits";
+import { IncidentFinance } from "@/components/finance/Incident";
 import { LossReports, SelfTestPanel, TEST_TTL_HOURS, freshTest } from "@/components/finance/Kept";
 import { PolicySection } from "@/components/finance/Policy";
 import { ReconciliationSection } from "@/components/finance/Reconciliation";
@@ -10,13 +11,14 @@ import { SafetyQueue } from "@/components/finance/SafetyQueue";
 import { SettlementsSection } from "@/components/finance/Settlements";
 import { Link } from "@/lib/nav";
 import {
-  FINANCE_SERVER, FINANCE_TABS, SAFETY_SERVER, finance, krw, todoTab,
+  FINANCE_SERVER, FINANCE_TABS, SAFETY_SERVER, finance, incidentName, krw, sortIncidents, todoTab,
   type FinanceKpis, type FinanceTab, type FinanceTodo, type LossReport, type Review, type SelfTest,
 } from "@/lib/finance";
 
-// 재무 AI 화면 = 캣북스 재무팀. 자동 수집 → 규칙으로 맞춤 → 예외만 사람에게 → 결산·리포트.
-// 건별 금액 승인은 하지 않는다(건별 검사는 안전 장치). 숫자는 서버가 계산한 값을 그대로 보여 주고, 말만 쉽게 바꾼다.
-// 기준: ax-backend docs/notes/finance/2026-10-23-finance-redesign.md §8·§11
+// 재무 AI 화면 = 캣북스 재무팀. 기본 화면은 시나리오 A(결제 장애)의 "장애 사건 재무"(⑨ 쿠폰 장부 → ⑩ 손실 → ⑰ 사건 후 감사).
+// 평상시 업무(결산·대사·정산·정책·감사 + 장애 손실 리포트)는 두 번째 탭에 그대로 둔다.
+// 건별 금액 승인은 하지 않는다(건별 검사는 안전 관문). 숫자는 서버가 계산한 값을 그대로 보여 주고, 말만 쉽게 바꾼다.
+// 기준: ax-backend docs/notes/finance/2026-10-23-finance-redesign.md §8·§11·§12
 
 const REFRESH_MS = 30_000;
 
@@ -49,16 +51,31 @@ async function settle<T>(p: Promise<T>): Promise<[T | null, string | null]> {
   try { return [await p, null]; } catch (e) { return [null, (e as Error).message]; }
 }
 
+/** 화면 맨 위 전환: 장애 사건 재무(기본) | 평상시 재무 업무. 주소가 #daily 또는 #closing 같은 모듈 이름이면 평상시 업무 */
+type Mode = "incident" | "daily";
+const MODE_LABEL: Record<Mode, string> = { incident: "장애 사건 재무", daily: "평상시 재무 업무" };
+
 const scrollToId = (id: string) => requestAnimationFrame(() => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" }));
 
 export default function FinancePage() {
   const location = useLocation();
   const navigate = useNavigate();
   const hashTab = location.hash.replace(/^#/, "");
-  const tab: FinanceTab = (FINANCE_TABS as string[]).includes(hashTab) ? (hashTab as FinanceTab) : "closing";
+  const isTab = (FINANCE_TABS as string[]).includes(hashTab);
+  const mode: Mode = isTab || hashTab === "daily" ? "daily" : "incident";
+  const tab: FinanceTab = isTab ? (hashTab as FinanceTab) : "closing";
+  const urlIncident = new URLSearchParams(location.search).get("incident");
   const openTab = useCallback((t: FinanceTab, scroll = false) => {
-    navigate({ hash: `#${t}` }, { replace: true });
+    navigate({ search: location.search, hash: `#${t}` }, { replace: true });
     if (scroll) scrollToId("finance-modules");
+  }, [navigate, location.search]);
+  const openMode = useCallback((m: Mode) => {
+    navigate({ search: location.search, hash: m === "daily" ? "#daily" : "" }, { replace: true });
+  }, [navigate, location.search]);
+  /** 사건 고르기: 주소(?incident=)에 남겨 새로고침해도 같은 사건을 본다 */
+  const openIncident = useCallback((id: string, scroll = false) => {
+    navigate({ search: `?incident=${encodeURIComponent(id)}`, hash: "" }, { replace: true });
+    if (scroll) scrollToId("incident-finance");
   }, [navigate]);
 
   // 30초마다, 그리고 무언가를 바꾼 뒤 모든 섹션을 새로 받는다
@@ -70,6 +87,9 @@ export default function FinancePage() {
   }, [bump]);
 
   const overview = useResource("overview", () => finance.overview(), tick);
+  const incidents = useResource("incidents", () => finance.incidents(), tick);
+  const incidentList = sortIncidents(incidents.env?.data ?? []);
+  const selectedIncident = urlIncident ?? incidentList[0]?.context_id ?? null;
 
   // 서버 상태 · 보류 큐 · 손실
   const [financeUp, setFinanceUp] = useState<boolean | null>(null);
@@ -120,7 +140,14 @@ export default function FinancePage() {
 
   const pendingReviews = (reviews ?? []).filter((r) => r.status === "pending");
   const todo = overview.env?.data.todo ?? [];
-  const todoCount = todo.length + (pendingReviews.length ? 1 : 0);
+  // 장애 사건: 보류 쿠폰이 있거나 사건 후 감사에서 문제가 나온 사건
+  const heldIncidents = incidentList.filter((i) => i.held_count > 0);
+  const failedIncidents = incidentList.filter((i) => i.checks_ok === false);
+  // 보류 쿠폰으로 이미 보여 준 사건의 보류 건은 "보류 큐" 항목에서 빼 두 번 세지 않는다
+  const heldCtx = new Set(heldIncidents.map((i) => i.context_id));
+  const otherPending = pendingReviews.filter((r) => !heldCtx.has(r.context_id));
+  const todoCount = todo.length + (otherPending.length ? 1 : 0) + heldIncidents.length + failedIncidents.length;
+  const anyTodoLoaded = overview.env || reviews || incidents.env;
 
   return (
     <div className="max-w-[1320px] space-y-6 px-4 pb-12 pt-2 sm:space-y-8 sm:px-8">
@@ -129,8 +156,8 @@ export default function FinancePage() {
         <div className="min-w-0">
           <h1 className="text-2xl font-bold tracking-tight">재무 AI</h1>
           <p className="mt-1 max-w-2xl text-sm text-ink-500">
-            캣북스의 재무팀입니다. 매일 거래를 자동으로 모아 규칙으로 맞춰 보고, 사람이 봐야 할 예외만 올린 뒤 결산과 리포트를 만듭니다.
-            쿠폰·환불을 한 건씩 승인하지는 않습니다(그건 안전 장치가 기준표로 검사합니다).
+            캣북스의 재무팀입니다. 장애가 나면 보상 쿠폰을 사건별 장부에 적고, 피해와 보상을 더해 손실을 정리하고, 끝난 뒤 보상이 규칙대로 나갔는지 감사합니다.
+            평소에는 결산·대사·정산·한도·감사를 합니다. 쿠폰·환불을 한 건씩 승인하지는 않습니다(그건 안전 관문이 기준표로 검사합니다).
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 text-xs sm:ml-auto">
@@ -144,15 +171,14 @@ export default function FinancePage() {
       <details className="rounded-2xl border border-ink-100 bg-surface px-4 py-3 text-sm sm:px-5">
         <summary className="cursor-pointer font-semibold text-ink-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500">처음이라면: 관리자가 할 일</summary>
         <ol className="mt-3 list-decimal space-y-1.5 pl-5 text-ink-700">
-          <li>아침에 <b>재무 AI 테스트</b>를 누릅니다. 초록색이면 정상, 노란색은 연결 확인 필요, 빨간색이면 재무 담당자에게 알립니다.</li>
-          <li><b>지금 사람이 할 일</b>을 봅니다. 재무 AI가 자동으로 맞춰 보고 남은 예외만 여기에 나옵니다. 누르면 해당 화면으로 갑니다.</li>
-          <li><b>판매자 정산</b>: ③에서 금액을 보고 <b>정산 묶음 지급 승인 요청</b>을 누른 뒤, 아래 <b>안전 장치 보류 큐</b>에서 진행을 누릅니다. 보류 사유가 있는 판매자는 자동으로 빠집니다.</li>
-          <li><b>결산 확정</b>: ①에서 하루·한 달 숫자와 설명을 읽고 맞으면 <b>결산 확정</b>을 누릅니다.</li>
-          <li><b>대사 불일치</b>: ②에서 금액이 다르거나 PG에 없는 건을 확인하고, 어떻게 처리했는지 <b>메모</b>를 남깁니다.</li>
-          <li><b>한도 바꾸기</b>: ⑤의 제안을 보고, 바꾸려면 재무 담당자에게 <b>기준표(thresholds.toml) PR</b>을 요청합니다. 재무 AI는 제안만 하고 직접 바꾸지 않습니다.</li>
+          <li><b>사건 고르기</b>: <b>장애 사건 재무</b> 탭에서 살펴볼 장애 사건을 고릅니다. 가장 최근 사건이 먼저 열려 있습니다. (아침에는 먼저 <b>재무 AI 테스트</b>를 눌러 초록색인지 확인하세요.)</li>
+          <li><b>손실 확인</b>: 피해(데이터 AI가 센 숫자), 보상 쿠폰, <b>총 손실 = 피해 + 보상</b>, 보상 한도를 얼마나 썼는지 봅니다. 재무 단계 ⑨·⑩이 <b>끝남</b>이면 장부와 손실 리포트가 준비된 것입니다.</li>
+          <li><b>감사 결과 확인</b>: ⑰ 사건 후 감사에 ✗가 있으면 관련 기록 번호를 재무 담당자에게 알립니다. 영향 고객이 아닌 사람이 쿠폰을 받았거나, 한 사람이 두 번 받았거나, 한도를 넘었다는 뜻입니다.</li>
+          <li><b>보류 큐 결정</b>: 판정이 <b>C</b>인 쿠폰은 아래 <b>안전 장치 보류 큐</b>에서 진행 또는 멈춤을 누릅니다. 10분 안에 아무도 정하지 않으면 자동으로 취소됩니다.</li>
+          <li><b>평상시 업무</b>: <b>평상시 재무 업무</b> 탭에서 결산 확정, 대사 메모, 판매자 정산 묶음 요청, 한도 제안 확인, 감사를 합니다.</li>
         </ol>
         <p className="mt-3 text-xs text-ink-500">
-          모듈별 설명과 자주 묻는 질문은 <Link href="/finance/guide" className="font-medium text-brand-700 underline">재무 AI 관리자 사용법</Link>에 있습니다.
+          단계별 설명과 자주 묻는 질문은 <Link href="/finance/guide" className="font-medium text-brand-700 underline">재무 AI 관리자 사용법</Link>에 있습니다.
         </p>
       </details>
 
@@ -175,13 +201,33 @@ export default function FinancePage() {
       <section aria-labelledby="todo" className={`rounded-3xl p-4 ring-1 sm:p-6 ${todoCount ? "bg-amber-50 ring-amber-100" : "bg-emerald-50 ring-emerald-100"}`}>
         <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
           <h2 id="todo" className={`text-sm font-semibold ${todoCount ? "text-amber-800" : "text-emerald-800"}`}>지금 사람이 할 일</h2>
-          <p className={`text-3xl font-bold tabular-nums ${todoCount ? "text-amber-800" : "text-emerald-800"}`}>{overview.env || reviews ? (todoCount ? `${todoCount}가지` : "없음") : "–"}</p>
+          <p className={`text-3xl font-bold tabular-nums ${todoCount ? "text-amber-800" : "text-emerald-800"}`}>{anyTodoLoaded ? (todoCount ? `${todoCount}가지` : "없음") : "–"}</p>
           <MockBadge meta={overview.env?.meta} />
         </div>
         {overview.error && !overview.env && <div className="mt-3"><ErrorBox message={overview.error} onRetry={overview.reload} /></div>}
         {!overview.env && !overview.error && <Waiting />}
         {todoCount > 0 && (
           <ul className="mt-4 space-y-2">
+            {heldIncidents.map((i) => (
+              <li key={`held-${i.context_id}`}>
+                <button type="button" onClick={() => goToQueue(null)}
+                  className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 rounded-2xl bg-surface px-4 py-3 text-left shadow-sm transition hover:ring-2 hover:ring-brand-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500">
+                  <Chip label="보류 쿠폰" tone={TONE.warn} />
+                  <span className="min-w-0 flex-1 text-sm font-medium text-ink-900">{incidentName(i.context_id)} 보상 쿠폰 {i.held_count}장이 보류 큐에서 결정을 기다림</span>
+                  <span className="text-xs font-medium text-brand-700">보류 큐로 →</span>
+                </button>
+              </li>
+            ))}
+            {failedIncidents.map((i) => (
+              <li key={`audit-${i.context_id}`}>
+                <button type="button" onClick={() => openIncident(i.context_id, true)}
+                  className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 rounded-2xl bg-surface px-4 py-3 text-left shadow-sm transition hover:ring-2 hover:ring-brand-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500">
+                  <Chip label="사건 감사" tone={TONE.bad} />
+                  <span className="min-w-0 flex-1 text-sm font-medium text-ink-900">{incidentName(i.context_id)} 사건 후 감사에서 확인할 점이 나옴</span>
+                  <span className="text-xs font-medium text-brand-700">보러 가기 →</span>
+                </button>
+              </li>
+            ))}
             {todo.map((t, i) => (
               <li key={`${t.kind}-${i}`}>
                 <button type="button" onClick={() => openTab(todoTab(t), true)}
@@ -193,12 +239,12 @@ export default function FinancePage() {
                 </button>
               </li>
             ))}
-            {pendingReviews.length > 0 && (
+            {otherPending.length > 0 && (
               <li>
                 <button type="button" onClick={() => scrollToId("safety-queue")}
                   className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 rounded-2xl bg-surface px-4 py-3 text-left shadow-sm transition hover:ring-2 hover:ring-brand-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500">
                   <Chip label="보류 큐" tone={TONE.warn} />
-                  <span className="min-w-0 flex-1 text-sm font-medium text-ink-900">안전 장치 보류 큐에서 결정 기다림 {pendingReviews.length}건</span>
+                  <span className="min-w-0 flex-1 text-sm font-medium text-ink-900">안전 장치 보류 큐에서 결정 기다림 {otherPending.length}건</span>
                   <span className="text-xs font-medium text-brand-700">보러 가기 →</span>
                 </button>
               </li>
@@ -206,8 +252,28 @@ export default function FinancePage() {
           </ul>
         )}
         {overview.env && todoCount === 0 && <p className="mt-2 text-sm text-emerald-800">재무 AI가 맞춰 본 결과, 지금 사람이 볼 예외가 없습니다.</p>}
+        {incidents.error && !incidents.env && <p className="mt-2 text-xs text-amber-800">장애 사건 목록을 받지 못해 보류 쿠폰·사건 감사 항목은 빠져 있을 수 있습니다.</p>}
       </section>
 
+      {/* 맨 위 전환: 장애 사건 재무 | 평상시 재무 업무 */}
+      <div role="tablist" aria-label="재무 화면" className="flex w-full gap-1 rounded-2xl bg-surface p-1 ring-1 ring-ink-100 sm:w-auto sm:max-w-md">
+        {(["incident", "daily"] as Mode[]).map((m) => (
+          <button key={m} type="button" role="tab" id={`mode-${m}`} aria-selected={mode === m} aria-controls={`mode-panel-${m}`} onClick={() => openMode(m)}
+            className={`flex-1 rounded-xl px-4 py-2.5 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500 ${mode === m ? "bg-brand-600 text-white" : "text-ink-700 hover:bg-ink-100"}`}>
+            {MODE_LABEL[m]}
+            {m === "incident" && mode !== m && heldIncidents.length + failedIncidents.length > 0 && <span className="ml-1.5 inline-block h-2 w-2 rounded-full bg-amber-500 align-middle" role="img" aria-label="확인할 일 있음" />}
+          </button>
+        ))}
+      </div>
+
+      {mode === "incident" && (
+        <div role="tabpanel" id="mode-panel-incident" aria-labelledby="mode-incident">
+          <IncidentFinance list={incidents} selected={selectedIncident} onSelect={(id) => openIncident(id)} tick={tick} onGoToQueue={goToQueue} />
+        </div>
+      )}
+
+      {mode === "daily" && (
+      <div role="tabpanel" id="mode-panel-daily" aria-labelledby="mode-daily" className="space-y-6 sm:space-y-8">
       {/* 오늘의 재무 */}
       <section aria-labelledby="today" className="space-y-3">
         <div className="flex flex-wrap items-center gap-2">
@@ -255,9 +321,11 @@ export default function FinancePage() {
         </div>
       </div>
 
-      <SafetyQueue reviews={reviews} error={reviewsError} highlight={highlight} reload={loadSide} />
-
       <LossReports losses={losses} error={lossError} />
+      </div>
+      )}
+
+      <SafetyQueue reviews={reviews} error={reviewsError} highlight={highlight} reload={loadSide} />
     </div>
   );
 }

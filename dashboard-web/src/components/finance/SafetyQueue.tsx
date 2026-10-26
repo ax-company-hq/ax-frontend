@@ -59,7 +59,7 @@ function tipOf(r: Review): string {
     case "over_threshold":
       if (r.action === "refund_request") return "쇼핑몰 관리 화면에서 주문·결제 금액을 확인한 뒤 결정하세요.";
       if (r.action === "seller_review") return "판매자 서류와 정보를 본 뒤 결정하세요. 애매하면 멈추세요.";
-      return "아래 '장애로 생긴 손실'과 비교해 보상이 지나치지 않으면 진행하세요.";
+      return "위 '장애 사건 재무'에서 그 사건의 피해 고객·피해 금액과 비교해 보상이 지나치지 않으면 진행하세요.";
     default: return "애매하면 멈추세요. 멈춘 일은 요청한 AI가 고쳐서 다시 요청할 수 있습니다.";
   }
 }
@@ -85,7 +85,7 @@ export function SafetyQueue({ reviews, error, highlight, reload }: { reviews: Re
         <p className={`text-sm font-semibold ${pending.length ? "text-amber-800" : "text-emerald-800"}`}>{pending.length ? `결정 기다림 ${pending.length}건` : "기다리는 일 없음"}</p>
       </div>
       <p className="mt-0.5 max-w-3xl text-xs leading-relaxed text-ink-500">
-        판매자 정산 지급처럼 사람만 정할 수 있는 일이 여기 모입니다. 금액과 이유를 보고 진행 또는 멈춤을 누르세요. 진행은 되돌릴 수 없고, 애매하면 멈춤을 누르세요. 정한 시간 안에 아무도 누르지 않으면 자동으로 멈춥니다.
+        판매자 정산 지급처럼 사람만 정할 수 있는 일과, 안전 관문이 C로 보류한 보상 쿠폰·환불(한도 초과·금액 불일치)이 여기 모입니다. 금액과 이유를 보고 진행 또는 멈춤을 누르세요. 진행은 되돌릴 수 없고, 애매하면 멈춤을 누르세요. 정한 시간 안에 아무도 누르지 않으면 자동으로 멈춥니다.
       </p>
       {error && <p role="alert" className="mt-3 rounded-xl bg-red-50 px-4 py-2 text-sm text-red-800">{SAFETY_SERVER}에서 보류 큐를 받지 못했습니다. {error}</p>}
       {!humanTokenSet && pending.length > 0 && <p className="mt-3 text-xs text-amber-800">결정 권한(VITE_SAFETY_HUMAN_TOKEN)이 설정되지 않아 버튼이 꺼져 있습니다.</p>}
@@ -109,7 +109,7 @@ export function SafetyQueue({ reviews, error, highlight, reload }: { reviews: Re
                   <div className="flex flex-wrap items-center gap-2">
                     <b className="text-[15px]">{action(r.action)}</b>
                     <Chip label={r.action === "confirm_settlement" || r.report.rules?.some((h) => h.key === "base_grade") ? "항상 사람이 확인" : WHY_HELD[r.report.hold_reason ?? ""] ?? "확인 필요"} tone="bg-amber-100 text-amber-800" />
-                    {mark && <Chip label="방금 요청한 정산 묶음" tone={TONE.info} />}
+                    {mark && <Chip label={r.action === "confirm_settlement" ? "방금 요청한 정산 묶음" : "방금 고른 건"} tone={TONE.info} />}
                   </div>
                   {lines.length > 0 && <ul className="mt-1 space-y-0.5 text-sm text-ink-700">{lines.map((t) => <li key={t}>{t}</li>)}</ul>}
                   <p className="mt-1.5 rounded-lg bg-brand-50 px-2 py-1 text-xs text-brand-700">이럴 땐: {tipOf(r)}</p>

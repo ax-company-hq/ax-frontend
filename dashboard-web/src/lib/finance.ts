@@ -3,13 +3,16 @@ import { FINANCE_AGENT_URL, SAFETY_API_URL, SAFETY_HUMAN_TOKEN } from "./env";
 
 // 재무 화면 → finance(8105) · safety(8001) API. 응답은 ax-backend 규약 {data, meta} / {error: {code, message}}.
 // 재무 AI = 캣북스의 재무팀 (결산·대사·판매자 정산·예산 한도·사후 감사).
-// 형식 기준: ax-backend docs/notes/finance/2026-10-23-finance-redesign.md §11. 필드 이름을 바꾸지 않는다.
+// 형식 기준: ax-backend docs/notes/finance/2026-10-23-finance-redesign.md §11·§12-1. 필드 이름을 바꾸지 않는다.
 
 // ---------------------------------------------------------------- 공통 봉투
 export interface FinanceMeta {
   mock: boolean;
-  collected_at: string;
+  /** §12-1 사건 응답에는 없을 수 있다 */
+  collected_at?: string;
   source?: "shop-api" | "seed" | string;
+  /** §12-1 사건 목록: 쿠폰 장부를 어디서 채웠는지 */
+  ledger_source?: LedgerSource;
   /** 값을 못 받아 null로 둔 필드 이름 */
   unavailable?: string[];
 }
@@ -121,6 +124,91 @@ export interface AuditStats {
   gate_rejected: number | null;
 }
 export interface AuditReport { from: string; to: string; stats: AuditStats; findings: AuditFinding[] }
+
+// ---------------------------------------------------------------- §12 시나리오 A: 장애 사건 재무
+// ⑨ 쿠폰 장부 기록 → ⑩ 손실 리포트(피해 + 보상) → ⑰ 사건 후 감사. 쿠폰 건별 승인은 안전 관문(A/C)이 한다.
+/** 장부 출처: 이벤트 버스(coupon.issued) / 안전 관문 실행 기록(issue_coupon) / 목 시드 */
+export type LedgerSource = "events" | "safety_executions" | "seed";
+
+export interface IncidentSummary {
+  context_id: string;
+  component: string | null;
+  opened_at: string | null;
+  damage_amount: number | null;
+  compensation_total: number;
+  coupon_count: number;
+  held_count: number;
+  loss_total: number | null;
+  checks_ok: boolean | null;
+}
+
+export interface ImpactCategory { category: string; orders: number; amount: number }
+export interface IncidentImpact {
+  failed_orders: number;
+  affected_customers: number;
+  damage_amount: number;
+  by_category: ImpactCategory[];
+  affected_customer_ids: string[];
+  source: string;
+  collected_at: string | null;
+}
+
+export type CouponStatus = "executed" | "held" | "rejected" | "failed";
+export interface IncidentCoupon {
+  buyer_id: string;
+  execution_id: string;
+  coupon_id: string | null;
+  count: number;
+  unit_value: number;
+  amount: number;
+  purpose_code: string;
+  reason_code: string | null;
+  grade: "A" | "C";
+  status: CouponStatus;
+  review_id: string | null;
+  at: string;
+  /** 데이터 영향 고객 목록에 있는지. null = 영향 고객 목록이 없어 확인 불가 */
+  in_impact: boolean | null;
+}
+export interface IncidentCompensation {
+  coupons: IncidentCoupon[];
+  total_executed: number;
+  total_held: number;
+  count_executed: number;
+  count_held: number;
+}
+
+export interface IncidentLimits {
+  per_customer: { limit: number | null; max_used: number; buyer_id: string | null };
+  per_incident: { limit: number | null; used: number; remaining: number | null };
+}
+
+export interface IncidentLoss {
+  damage_amount: number | null;
+  compensation_total: number;
+  total: number | null;
+  status: "complete" | "partial";
+  missing: string[];
+}
+
+export type IncidentCheckCode = "recipients_in_impact" | "one_coupon_per_buyer" | "per_customer_limit" | "per_incident_limit" | "amount_recheck";
+export interface IncidentCheck { code: IncidentCheckCode | string; ok: boolean | null; title: string; detail: string; refs: string[] }
+
+export type IncidentStepStatus = "done" | "waiting" | "unavailable";
+export interface IncidentStep { no: string; title: string; status: IncidentStepStatus; detail: string }
+
+export interface IncidentDetail {
+  context_id: string;
+  component: string | null;
+  window: { from: string; to: string } | null;
+  impact: IncidentImpact | null;
+  compensation: IncidentCompensation;
+  limits: IncidentLimits;
+  loss: IncidentLoss;
+  checks: IncidentCheck[];
+  steps: IncidentStep[];
+  ledger_source: LedgerSource;
+}
 
 // ---------------------------------------------------------------- 안전 장치 보류 큐 (safety)
 export interface RuleHit { key: string; observed?: number; op?: string; value?: number | string; outside?: string[]; invalid?: string }
@@ -274,6 +362,11 @@ export const finance = {
   policy: () => fin<Envelope<Policy>>("/api/finance/policy"),
   audit: (days = 7) => fin<Envelope<AuditReport>>(`/api/finance/audit${query({ days })}`),
 
+  // §12-1 장애 사건 재무 (시나리오 A)
+  incidents: () => fin<Envelope<IncidentSummary[]>>("/api/finance/incidents"),
+  /** 없는 사건이면 404 {"error": {"code": "not_found"}} */
+  incident: (contextId: string) => fin<Envelope<IncidentDetail>>(`/api/finance/incidents/${encodeURIComponent(contextId)}`),
+
   // 유지
   marketOps: () => data(fin<{ data: MarketOp[] }>("/api/finance/market-ops")),
   lossReports: () => data(fin<{ data: LossReport[] }>("/api/finance/loss-reports")),
@@ -359,3 +452,25 @@ export function todoTab(t: Pick<FinanceTodo, "kind" | "link">): FinanceTab {
   if ((FINANCE_TABS as string[]).includes(link)) return link as FinanceTab;
   return TODO_TAB[t.kind] ?? "closing";
 }
+
+// ---------------------------------------------------------------- 장애 사건 표시 도우미
+/** "ctx_inc_20261026_01" → "장애 #20261026_01" */
+export const incidentName = (contextId: string) => `장애 #${contextId.replace(/^ctx_inc_/, "")}`;
+
+/** 최근 사건이 먼저. 시각이 없는 사건은 뒤로 */
+export function sortIncidents(list: IncidentSummary[]): IncidentSummary[] {
+  return [...list].sort((a, b) => {
+    if (a.opened_at && b.opened_at) return b.opened_at.localeCompare(a.opened_at);
+    if (a.opened_at) return -1;
+    if (b.opened_at) return 1;
+    return b.context_id.localeCompare(a.context_id);
+  });
+}
+
+export const LEDGER_SOURCE_KO: Record<LedgerSource, { label: string; detail: string }> = {
+  events: { label: "이벤트", detail: "마케팅 AI가 쿠폰을 줄 때 보낸 알림(coupon.issued)을 받아 장부에 적었습니다." },
+  safety_executions: { label: "안전 관문 실행 기록", detail: "알림을 받을 수 없어, 안전 관문이 남긴 쿠폰 지급 실행 기록을 읽어 장부를 채웠습니다." },
+  seed: { label: "예시 데이터", detail: "연습용 예시 자료입니다. 실제 쿠폰 지급 기록이 아닙니다." },
+};
+export const ledgerSourceKo = (s: LedgerSource | string | null | undefined) =>
+  s && s in LEDGER_SOURCE_KO ? LEDGER_SOURCE_KO[s as LedgerSource] : { label: s || UNKNOWN, detail: "" };
