@@ -4,6 +4,7 @@ export const COMPANY = {
   name: import.meta.env.VITE_COMPANY_NAME ?? '캣북스',
   tagline: import.meta.env.VITE_COMPANY_TAGLINE ?? '책과 문구, 고양이가 지키는 서점',
   shopUrl: import.meta.env.VITE_SHOP_WEB_URL ?? 'http://localhost:3000',
+  adminUrl: import.meta.env.VITE_DASHBOARD_WEB_URL ?? 'http://localhost:3001', // 관리자(/admin/)로 돌아가는 링크
 }
 
 // 판매 사이트 파비콘을 브랜드 아이콘으로 쓴다. ① .env에 지정한 아이콘 ② 흔한 경로(icon.svg·favicon.svg·favicon.ico)를
@@ -33,7 +34,9 @@ async function iconFromHtml(site: string): Promise<string | undefined> {
 }
 
 // 앞에서부터 먼저 불러지는 것을 쓴다 (경로 후보는 한꺼번에 확인)
-export async function findSiteIcon(site = COMPANY.shopUrl): Promise<string> {
+export async function findSiteIcon(shopUrl = COMPANY.shopUrl): Promise<string> {
+  // 게이트웨이(한 포트)에서는 판매 사이트 주소가 '/' 같은 상대 경로라 지금 주소 기준으로 바꾼다
+  const site = new URL(shopUrl, window.location.href).href
   const explicit = import.meta.env.VITE_COMPANY_LOGO
   if (explicit && (await loads(explicit))) return explicit
   const paths = COMMON_PATHS.map((p) => new URL(p, site).href)

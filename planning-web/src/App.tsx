@@ -122,6 +122,7 @@ export function App() {
       badge: badge[id] || undefined,
     })),
     { href: '#/depts', label: '다른 부서 (시뮬레이터)', icon: 'compare', active: section === 'depts', badge: unreadOut || undefined },
+    { href: COMPANY.adminUrl, label: '관리자로' },
     { href: COMPANY.shopUrl, label: `${COMPANY.name} 바로가기` },
   ]
 
