@@ -53,7 +53,9 @@ function Flow({ inc }: { inc: OrchIncident }) {
     <ol className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
       {FLOW.map((f, idx) => {
         const step = stepOf(inc, f.stepId);
-        const st = step ? STEP_STATUS_KO[step.status] ?? { label: step.status, tone: "muted" as const } : null;
+        // 처리 시간 요약: 단계는 끝났어도 요약할 사건 기록(incidents)이 비어 있으면 결과는 확인할 수 없다
+        const kpiEmpty = f.key === "kpi" && step?.status === "completed" && !(Array.isArray(step.output?.incidents) && step.output.incidents.length > 0);
+        const st = !step ? null : kpiEmpty ? { label: UNKNOWN, tone: "muted" as const } : STEP_STATUS_KO[step.status] ?? { label: step.status, tone: "muted" as const };
         const at = step?.finished_at ?? step?.started_at ?? null;
         return (
           <li key={f.key} className={`relative rounded-2xl px-4 py-3 ring-1 ${step ? "bg-surface-2 ring-ink-100" : "border border-dashed border-ink-300 ring-transparent"}`}>
@@ -66,6 +68,7 @@ function Flow({ inc }: { inc: OrchIncident }) {
               {step && <span className="tabular-nums text-ink-500">{at ? shortDateTime(at) : "시각 모름"}</span>}
             </div>
             {f.note && step && <p className="mt-1.5 text-[11px] text-ink-500">{f.note}</p>}
+            {kpiEmpty && <p className="mt-1.5 text-[11px] text-ink-500">단계는 끝났지만 요약할 사건 기록이 없습니다</p>}
           </li>
         );
       })}
