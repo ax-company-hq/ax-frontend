@@ -29,6 +29,7 @@ export const IconClock = (p: P) => <Icon {...p}><circle cx="12" cy="12" r="9" />
 export const IconInbox = (p: P) => <Icon {...p}><path d="M3 13h5l2 3h4l2-3h5" /><path d="M5 5h14l2 8v6H3v-6l2-8Z" /></Icon>;
 export const IconShield = (p: P) => <Icon {...p}><path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6l-8-3Z" /><path d="m9 12 2 2 4-4" /></Icon>;
 export const IconUsers = (p: P) => <Icon {...p}><circle cx="9" cy="8" r="3.2" /><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6" /><path d="M16 5.2a3.2 3.2 0 0 1 0 5.6M18 14.4c1.8.8 3 2.6 3 5.6" /></Icon>;
+export const IconMegaphone = (p: P) => <Icon {...p}><path d="M3 10v4h3l8 4V6L6 10H3Z" /><path d="M18 9a4 4 0 0 1 0 6" /></Icon>;
 export const IconArrowIn = (p: P) => <Icon {...p}><path d="M17 7 7 17M7 9v8h8" /></Icon>;
 export const IconArrowOut = (p: P) => <Icon {...p}><path d="M7 17 17 7M9 7h8v8" /></Icon>;
 export const IconChevronRight = (p: P) => <Icon {...p}><path d="m9 6 6 6-6 6" /></Icon>;
