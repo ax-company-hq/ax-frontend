@@ -7,7 +7,8 @@
 
 | 경로 | 화면 |
 | --- | --- |
-| `/` | 대시보드: 문의·클레임 추이, 자주 걸리는 규칙, 답변 대기 문의, 보상 큐 앞줄 |
+| `/` | 대시보드: 문의·클레임 추이, 자주 걸리는 규칙, 부서별 호출 현황(총괄이 부서를 부른 횟수·오류·성공률·평균 응답, skill별 표·최근 호출), 오늘의 브리핑, 답변 대기 문의, 보상 큐 앞줄 |
+| `/orchestrator` | 총괄: 총괄 에이전트가 연 사건 목록과 상세(15단계 진행, 부서별 상태, 사람 승인 대기, 진행 기록). 읽기 전용 |
 | `/console` | 상담 콘솔: 문의 목록, 답변 초안(3가지 스타일)·근거·가드 검사, 요약 |
 | `/claims` | 클레임 판정: 규칙 엔진 결과 확인, 승인·거절, 입고·검수 |
 | `/queue` | 보상 큐: 입고 순서대로 환불·보상 지급 |
@@ -75,3 +76,9 @@ TODO: common-frontend 버전 태그로 설치 (AppShell 메뉴에 부서 항목,
 
 **현재 상태:** catbooks 화면은 자체 Tailwind 설정(`tailwind.config.ts`)과 `src/styles.css`의 CSS 변수(라이트·다크)로 그린다. 색 값은 모두 CSS 변수를 거치지만 common-frontend 토큰은 아직 쓰지 않는다.
 두 스타일을 한 번에 섞으면 `.btn`·`.card`·`.chip` 클래스 이름이 겹치므로, common-frontend 적용은 별도 PR로 한다.
+
+### 총괄·부서별 호출 현황 (개발용 임시 연결)
+`/orchestrator`와 대시보드의 「부서별 호출 현황」은 총괄 서버를 직접 부르지 않고 shop-api 관리 읽기 중계(`GET /api/shop/admin/orchestrator/incidents`, `.../departments`, GET만)를 부른다.
+- 개발 서버(`npm run dev`)에서는 기본값(`http://localhost:8010`, 토큰 `mock:admin`)으로 자동 연결된다. 운영 빌드는 `VITE_SHOP_ADMIN_API_URL`과 `VITE_SHOP_ADMIN_TOKEN`이 없으면 꺼지고 화면도 비어 있다.
+- shop-api는 이 화면의 출처를 허용해야 한다: `SHOP_CORS_ORIGINS=http://localhost:3000,http://localhost:3001`. 총괄 주소는 shop-api의 `SHOP_ORCHESTRATOR_URL`이다.
+- 토큰은 환경변수에서만 오고 브라우저 저장소에는 두지 않는다. 진짜 로그인과 역할(소유자·공동소유자·분야 관리자·에이전트)은 사람 인증(#265) 뒤에 이 자리를 대신한다.

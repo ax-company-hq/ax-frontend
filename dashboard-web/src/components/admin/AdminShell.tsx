@@ -4,11 +4,12 @@ import { useEffect, useState, type ReactNode } from "react";
 import { api } from "@/lib/api";
 import { PLANNING_WEB_URL, SHOP_WEB_URL } from "@/lib/env";
 import type { Health } from "@/lib/types";
-import { IconAgents, IconBell, IconBook, IconBox, IconChat, IconDashboard, IconReceipt, IconSearch, IconShield, IconStar, IconUsers } from "../icons";
+import { IconAgents, IconBell, IconBook, IconBox, IconBolt, IconChat, IconDashboard, IconReceipt, IconSearch, IconShield, IconStar, IconUsers } from "../icons";
 import { ThemeToggle } from "../ThemeToggle";
 
 const NAV = [
   { href: "/", label: "대시보드", Icon: IconDashboard },
+  { href: "/orchestrator", label: "총괄", Icon: IconBolt },
   { href: "/console", label: "상담 콘솔", Icon: IconChat },
   { href: "/claims", label: "클레임 판정", Icon: IconReceipt },
   { href: "/queue", label: "보상 큐", Icon: IconBox },

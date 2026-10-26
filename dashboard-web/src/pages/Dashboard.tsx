@@ -1,6 +1,7 @@
 import { Link } from "@/lib/nav";
 import { useEffect, useState } from "react";
 import { Bars, Blockers, Loading, OFFLINE, Stat } from "@/components/admin/bits";
+import { DeptUsage } from "@/components/admin/DeptUsage";
 import { ChartWithTable, Legend, LineChart, RingMeter, TableView } from "@/components/charts";
 import { IconBolt, IconChevronRight } from "@/components/icons";
 import { api } from "@/lib/api";
@@ -64,6 +65,8 @@ export default function DashboardPage() {
             <Bars data={d.guard_findings} labels={GUARD_KO} color="bg-accent" />
           </div>
         </section>
+
+        <DeptUsage />
       </div>
 
       <aside className="w-full shrink-0 space-y-8 bg-surface-2 px-8 py-6 xl:w-[400px]">
