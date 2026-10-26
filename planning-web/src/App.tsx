@@ -67,7 +67,7 @@ const renderLink: LinkRenderer = ({ item, className, children }) => {
 
 // 사이드바 로고 = 고객사 판매 사이트 파비콘 (이 화면의 브라우저 탭 아이콘은 그대로 둔다)
 function useSiteIcon(): string {
-  const [src, setSrc] = useState('/logo-mark.svg')
+  const [src, setSrc] = useState(`${import.meta.env.BASE_URL}logo-mark.svg`)
   useEffect(() => {
     let alive = true
     findSiteIcon().then((icon) => { if (alive) setSrc(icon) })
@@ -122,6 +122,7 @@ export function App() {
       badge: badge[id] || undefined,
     })),
     { href: '#/depts', label: '다른 부서 (시뮬레이터)', icon: 'compare', active: section === 'depts', badge: unreadOut || undefined },
+    { href: COMPANY.adminUrl, label: '관리자로' },
     { href: COMPANY.shopUrl, label: `${COMPANY.name} 바로가기` },
   ]
 
