@@ -21,10 +21,7 @@ const isActive = (path: string, href: string) => (href === "/" ? path === "/" : 
 
 function LogoMark() {
   return (
-    <svg width="34" height="30" viewBox="0 0 34 30" aria-hidden="true">
-      <path d="M5 28V8l7 5h10l7-5v20Z" fill="rgb(var(--brand-600))" />
-      <circle cx="17" cy="20" r="3.4" fill="rgb(var(--accent))" />
-    </svg>
+    <img src="/logo.png" width={34} height={34} alt="" aria-hidden="true" />
   );
 }
 

@@ -67,7 +67,7 @@ const renderLink: LinkRenderer = ({ item, className, children }) => {
 
 // 사이드바 로고 = 고객사 판매 사이트 파비콘 (이 화면의 브라우저 탭 아이콘은 그대로 둔다)
 function useSiteIcon(): string {
-  const [src, setSrc] = useState(`${import.meta.env.BASE_URL}logo-mark.svg`)
+  const [src, setSrc] = useState(`${import.meta.env.BASE_URL}logo.png`)
   useEffect(() => {
     let alive = true
     findSiteIcon().then((icon) => { if (alive) setSrc(icon) })
