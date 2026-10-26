@@ -43,7 +43,7 @@ const Q = ({ q, children }: { q: string; children: ReactNode }) => (
 
 export default function FinanceGuidePage() {
   return (
-    <div className="max-w-[880px] space-y-10 px-4 pb-14 pt-2 sm:px-8">
+    <div className="w-full space-y-10 px-4 pb-14 pt-2 sm:px-8">
       <header>
         <Link href="/finance" className="text-sm text-brand-700 hover:underline">← 재무 AI로 돌아가기</Link>
         <h1 className="mt-3 text-2xl font-bold tracking-tight">재무 AI 관리자 사용법</h1>
