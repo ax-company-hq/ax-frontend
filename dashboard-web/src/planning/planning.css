@@ -454,9 +454,9 @@ a.plain-link:hover { color: var(--primary); }
 /* 업무 시스템(dashboard-web) 안의 기획개발 메뉴 줄. 업무 시스템 상단 탭과 같은 밑줄 탭 모양 */
 .planning-scope { min-height: 100%; background: var(--bg); color: var(--text); }
 .pl-bar { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 16px; padding: 0 32px; min-height: 52px; background: var(--surface); border-bottom: 1px solid var(--border-strong); }
-.pl-menu { display: flex; gap: 20px; flex: 1; min-width: 0; overflow-x: auto; }
+.pl-menu { display: flex; gap: 20px; flex: 1; min-width: 0; overflow-x: auto; overflow-y: hidden; }
 .pl-menu a { position: relative; display: inline-flex; align-items: center; gap: 6px; padding: 14px 0; font-size: 14px; color: var(--text-3); text-decoration: none; white-space: nowrap; }
 .pl-menu a:hover { color: var(--text); }
 .pl-menu a.on { color: var(--text); font-weight: 600; }
-.pl-menu a.on::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; border-radius: 2px; background: var(--text); }
+.pl-menu a.on::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; border-radius: 2px; background: var(--text); }
 .pl-tools { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }

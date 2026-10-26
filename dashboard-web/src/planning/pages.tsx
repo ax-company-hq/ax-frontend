@@ -1,7 +1,7 @@
 // 기획개발팀 탭의 하위 화면. 작업·운영·사후관리·교차검증은 프로젝트 탭과 같은 틀(왼쪽 목록 / 가운데 세로 흐름 / 오른쪽 곁 블록)을 쓴다
 import { useEffect, useState, type Dispatch, type ReactNode } from 'react'
 import { Button, Card, Notice, useToast, type Column } from '@dejafix/common-frontend'
-import { DEPT_NAME, IRREVERSIBLE, PORTS, TARGET_LABEL, TODAY, GUARD, OBSERVE_MIN, OBSERVE_N, activeRules, ruleText, type Action, type Activity as Act, type AuditItem, type AutoRule, type CrossReview, type Dept, type PR, type State as S } from './data'
+import { DEPT_NAME, IRREVERSIBLE, PORTS, TARGET_LABEL, TODAY, GUARD, OBSERVE_MIN, OBSERVE_N, activeRules, ruleText, type Action, type Activity as Act, type AuditItem, type AutoRule, type CrossReview, type Dept, type PR, type Spec, type State as S } from './data'
 import { codeOf, traceOf, type CodeLine } from './trace'
 import { ActivityList, Dep, Grade, Lead, LinkTable, Point, Sec, State, Stats, rowNav, Tag } from './parts'
 import { Linked, Ref, convoHref, go, hrefOf, prFromSlug, prSlug, reviewOf } from './links'
@@ -14,8 +14,12 @@ interface P { s: S; d: Dispatch<Action> }
 
 // ---------------------------------------------------------------- 기획 문서 (문서가 원본, 문단에 모든 것이 붙는다)
 export function Specs({ s, d, item, item2 }: P & { item?: string; item2?: string }) {
-  const toast = useToast()
   const spec = s.specs.find((x) => x.id === item) ?? s.specs.find((x) => x.id === 'SPEC-7') ?? s.specs[0]
+  if (!spec) return <div className="empty"><b>기획서 없음</b></div>
+  return <SpecView s={s} d={d} spec={spec} item2={item2} />
+}
+
+function SpecView({ s, d, spec, item2 }: P & { spec: Spec; item2?: string }) {
   const para = spec.paras.find((p) => p.id === item2) ?? spec.paras.find((p) => p.id === (spec.id === 'SPEC-7' ? 'R2' : '')) ?? spec.paras[0]
   const paraHref = (id: string) => `#/work/specs/${spec.id}/${id}`
   const setParaId = (id: string) => go(paraHref(id))
@@ -25,7 +29,6 @@ export function Specs({ s, d, item, item2 }: P & { item?: string; item2?: string
   const thread = s.threads.find((t) => t.on === spec.id)
   const inc = s.incidents.find((i) => i.candidates.some((c) => c.spec === spec.id && c.para === para.id))
   const xr = reviewOf(s, spec.id)
-  const answer = spec.id === 'SPEC-7' ? '재고가 없어진 상품은 남기되 품절로 표시해 주세요.' : '화면 문구만 바꿔 주세요.'
 
   return (
     <div className="three">
@@ -75,7 +78,6 @@ export function Specs({ s, d, item, item2 }: P & { item?: string; item2?: string
         {spec.question && (
           <div className="question">
             질문 · {spec.question}
-            <Button size="small" onClick={() => { d({ type: 'answerQuestion', spec: spec.id, text: answer }); toast.show('답을 받아 확정 조건을 다시 확인합니다') }}>시연: 요청 부서가 스레드에 답함</Button>
           </div>
         )}
         <h3 className="sec">근거</h3>
@@ -137,7 +139,7 @@ function PrLine({ s, p, d }: { s: S; p: PR; d: Dispatch<Action> }) {
         <Tag tone={last === '통과' ? 'green' : 'amber'}>검수 {last}{p.reviews.length > 1 ? ` (${p.reviews.length}회차)` : ''}</Tag>
         {p.merged ? <Tag tone="green">{mergedLabel(p)}</Tag> : xr ? <a href={`#/work/reviews/${xr.id}`}><Tag tone="amber">{xr.lane === 'human' ? '사람 확인 대기' : '교차검증 대기'} {xr.id}</Tag></a> : rejected ? <Tag tone="amber">검증자 거절</Tag> : null}
       </span>
-      {!p.merged && (last === '불일치' || rejected) && <Button size="small" onClick={() => d({ type: 'reviewPr', pr: p.id })}>시연: 수정 후 재검수</Button>}
+      {!p.merged && (last === '불일치' || rejected) && <Button size="small" onClick={() => d({ type: 'reviewPr', pr: p.id })}>다시 검수</Button>}
     </div>
   )
 }
@@ -184,7 +186,7 @@ export function Work({ s, d, item }: P & { item?: string }) {
         </Step>
         <Step name="관문" on title={`${sel.gate.result} · ${sel.gate.lines}줄·${sel.gate.files}파일 · ${sel.gate.paths}`} />
         <Step name="검수" on={last === '통과'} title={sel.reviews.join(' → ')}>
-          {!sel.merged && (last === '불일치' || rejected) && <Button size="small" onClick={() => d({ type: 'reviewPr', pr: sel.id })}>시연: 수정 후 재검수</Button>}
+          {!sel.merged && (last === '불일치' || rejected) && <Button size="small" onClick={() => d({ type: 'reviewPr', pr: sel.id })}>다시 검수</Button>}
         </Step>
         <Step name="머지" on={sel.merged} href={xr ? `#/work/reviews/${xr.id}` : undefined} title={sel.merged ? mergedLabel(sel) : xr ? `${waitLabel(xr)} · ${xr.id}` : rejected ? '검증자 거절' : '머지 전'}>
           {xr && <p className="muted">{xr.verifier}</p>}
