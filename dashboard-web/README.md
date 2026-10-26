@@ -17,6 +17,9 @@
 | `/finance/guide` | 재무 AI 관리자 사용법 (5개 모듈 설명, 보류 큐에서 결정하는 법, 자주 묻는 질문) |
 
 상단 '쇼핑몰 보기'는 루트 `.env`의 `VITE_SHOP_WEB_URL`(기본 `http://localhost:3000`)을 연다.
+'기획개발 ↗'은 `VITE_PLANNING_WEB_URL`(기본 `http://localhost:3002`, 게이트웨이에서는 `/admin/planning/`)을 연다. 앱 사이 링크는 일반 `<a>`다 (`lib/nav.tsx`의 `Link`는 http(s)가 아니면 라우터 경로로 처리해 `/admin` 아래에서 깨진다).
+
+게이트웨이(한 포트)에서는 `DASHBOARD_WEB_BASE=/admin/`으로 빌드한다 (기본 `/`). 라우터 `basename`은 `import.meta.env.BASE_URL`에서 계산한다. `VITE_ADMIN_LOGIN=on`이면 화면 앞에 데모 비밀번호(`VITE_ADMIN_DEMO_PASSWORD`, 기본 `catbooks`)가 선다. 실제 인증이 아니고 비밀번호가 번들에 들어간다. 쓰기 요청(GET 외)에는 `VITE_SAFETY_HUMAN_TOKEN`을 `Authorization: Bearer`로 보낸다 (ax-backend #295).
 
 ## 2. 실행 방법
 레포 루트에서:

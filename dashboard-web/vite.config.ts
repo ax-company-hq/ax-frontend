@@ -11,6 +11,8 @@ export default defineConfig(({ mode }) => {
     '/orch': { target: orchestrator, changeOrigin: true, rewrite: (p: string) => p.replace(/^\/orch/, '') },
   }
   return {
+    // 관리자 한 포트(게이트웨이)에서는 `DASHBOARD_WEB_BASE=/admin/`으로 빌드한다. 로컬 개발은 루트
+    base: process.env.DASHBOARD_WEB_BASE ?? '/',
     plugins: [react()],
     resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
     envDir: '..',
