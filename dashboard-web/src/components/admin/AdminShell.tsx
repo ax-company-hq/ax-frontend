@@ -4,8 +4,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { api } from "@/lib/api";
 import { PLANNING_WEB_URL, SHOP_WEB_URL } from "@/lib/env";
 import type { Health } from "@/lib/types";
-import { IconBell, IconBook, IconBox, IconChat, IconDashboard, IconReceipt, IconSearch, IconShield, IconStar, IconUsers } from "../icons";
-import { IconAgents, IconBell, IconBook, IconBox, IconChat, IconDashboard, IconReceipt, IconSearch, IconShield, IconStar } from "../icons";
+import { IconAgents, IconBell, IconBook, IconBox, IconChat, IconDashboard, IconReceipt, IconSearch, IconShield, IconStar, IconUsers } from "../icons";
 import { ThemeToggle } from "../ThemeToggle";
 
 const NAV = [
