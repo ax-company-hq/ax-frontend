@@ -21,3 +21,7 @@ export const ADMIN_DEMO_PASSWORD = import.meta.env.VITE_ADMIN_DEMO_PASSWORD ?? '
  */
 export const RELAY_API_URL = import.meta.env.VITE_SHOP_ADMIN_API_URL || (import.meta.env.DEV ? 'http://localhost:8010' : '')
 export const RELAY_TOKEN = import.meta.env.VITE_SHOP_ADMIN_TOKEN || (import.meta.env.DEV ? 'mock:admin' : '')
+/** 데이터분석 AI 화면: 데이터 AI(data, 8106) 주소. 기본값 /data-a2a는 Vite 개발 프록시(vite.config.ts, DATA_PROXY_TARGET) */
+export const DATA_A2A_URL = import.meta.env.VITE_DATA_A2A_URL ?? '/data-a2a'
+/** 데이터 AI 직접 조회 토큰. 목 모드 전용(예: mock:dashboard-api). 비어 있으면 KPI 실시간 조회를 하지 않는다. 브라우저 저장소에 두지 않는다 */
+export const DATA_A2A_TOKEN = import.meta.env.VITE_DATA_A2A_TOKEN ?? ''

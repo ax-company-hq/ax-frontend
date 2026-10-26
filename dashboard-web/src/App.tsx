@@ -6,6 +6,7 @@ import AgentChat from '@/pages/AgentChat'
 import Claims from '@/pages/Claims'
 import Console from '@/pages/Console'
 import Dashboard from '@/pages/Dashboard'
+import Data from '@/pages/Data'
 import Finance from '@/pages/Finance'
 import FinanceGuide from '@/pages/FinanceGuide'
 import Hr from '@/pages/Hr'
@@ -13,6 +14,7 @@ import Orchestrator from '@/pages/Orchestrator'
 import Kb from '@/pages/Kb'
 import Queue from '@/pages/Queue'
 import Reviews from '@/pages/Reviews'
+import Support from '@/pages/Support'
 
 export function App() {
   return (
@@ -29,7 +31,10 @@ export function App() {
           <Route path="/finance/guide" element={<FinanceGuide />} />
           <Route path="/hr" element={<Hr />} />
           <Route path="/orchestrator" element={<Orchestrator />} />
+          <Route path="/data" element={<Data />} />
+          <Route path="/hr" element={<Hr />} />
           <Route path="/agents/chat" element={<AgentChat />} />
+          <Route path="/support" element={<Support />} />
           {/* catbooks 시절 /admin/* 주소 호환 */}
           <Route path="/admin/*" element={<LegacyAdminRedirect />} />
           <Route path="*" element={<Navigate to="/" replace />} />
