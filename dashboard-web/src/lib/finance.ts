@@ -124,6 +124,29 @@ export interface AuditReport { from: string; to: string; stats: AuditStats; find
 
 // ---------------------------------------------------------------- 안전 장치 보류 큐 (safety)
 export interface RuleHit { key: string; observed?: number; op?: string; value?: number | string; outside?: string[]; invalid?: string }
+// 안전 장치 실행 기록 (AI 대화방이 부서 간 실행 흐름을 그릴 때 읽는다. safety README 형식)
+export type Grade = "A" | "B" | "C";
+export type ExecStatus = "executed" | "verifying" | "held" | "rejected" | "failed";
+
+export interface ExecuteDecision {
+  execution_id: string;
+  grade: Grade;
+  status: ExecStatus;
+  computed_amount: number | null;
+  threshold_version: number | null;
+  verifier: string | null;
+  hold_reason: string | null;
+  review_id: string | null;
+}
+
+export interface ExecutionRecord {
+  execution_id: string;
+  created_at: string;
+  request: { action: string; requester: string; context_id: string; params: Record<string, unknown>; claimed_grade: string | null };
+  decision: ExecuteDecision;
+  customer: string | null;
+}
+
 export interface Review {
   review_id: string;
   execution_id: string;
@@ -269,6 +292,8 @@ export function query(params: Record<string, string | number | null | undefined>
 
 export const finance = {
   safetyHealth: () => saf<{ status: string }>("/health"),
+  /** 안전 장치 실행 기록 (AI 대화방에서 씀) */
+  executions: () => data(saf<{ data: ExecutionRecord[] }>("/api/safety/executions")),
   financeHealth: () => fin<{ status: string }>("/health"),
 
   // 재무팀 5개 모듈
