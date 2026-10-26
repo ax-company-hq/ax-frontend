@@ -17,7 +17,7 @@
 | `/finance` | 재무 AI(캣북스 재무팀): 지금 사람이 할 일, 오늘의 재무, ① 결산·리포트 ② 매출·PG 대사 ③ 판매자 정산 ⑤ 예산·한도 정책 ⑦ 내부통제·감사, 안전 장치 보류 큐(진행·멈춤), 장애 손실 (finance 8105·safety 8001) |
 | `/hr` | 인사 AI: 업무 기록(사람이 확인할 후보 결정, 계획 비교, 인사 AI가 한 일), 인수인계(진행 상황·완성도, 인계자 질문에 답하기), 담당 명부(영역별 담당·교대, 담당 공백). 인수인계 시작·확정은 총괄 AI가 부르므로 버튼이 없다 |
 | `/finance/guide` | 재무 AI 관리자 사용법 (5개 모듈 설명, 보류 큐에서 결정하는 법, 자주 묻는 질문) |
-| `/planning` | 기획개발 AI(캣북스 기획개발팀): 프로젝트·요청·작업·정리·소통·규정·자료·지표, 다른 부서 시뮬레이터. 화면 안 이동은 해시(`/planning#/requests`). 코드는 `src/planning/`(planning-web에서 옮김), 공통 컴포넌트 스타일은 `postcss.config.js`가 `.planning-scope` 안으로만 묶는다. 시연 데이터는 연동 버스(`VITE_BUS_URL`, 기본 127.0.0.1:8790, `npm run bus:planning`) |
+| `/planning` | 기획개발 AI(캣북스 기획개발팀): 프로젝트·요청·작업·정리·소통·규정·자료·지표. 다른 부서 시뮬레이터는 넣지 않았다(개발 도구는 planning-web 3003). 화면 안 이동은 해시(`/planning#/requests`). 코드는 `src/planning/`(planning-web에서 옮김), 공통 컴포넌트 스타일은 `postcss.config.js`가 `.planning-scope` 안으로만 묶는다. 시연 데이터는 연동 버스(`VITE_BUS_URL`, 기본 127.0.0.1:8790, `npm run bus:planning`) |
 
 상단 '쇼핑몰 보기'는 루트 `.env`의 `VITE_SHOP_WEB_URL`(기본 `http://localhost:3000`)을 연다.
 '기획개발 ↗'은 `VITE_PLANNING_WEB_URL`(기본 `http://localhost:3002`, 게이트웨이에서는 `/admin/planning/`)을 연다. 앱 사이 링크는 일반 `<a>`다 (`lib/nav.tsx`의 `Link`는 http(s)가 아니면 라우터 경로로 처리해 `/admin` 아래에서 깨진다).

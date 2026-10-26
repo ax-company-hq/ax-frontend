@@ -6,7 +6,6 @@ import './planning.css'
 import { useEffect, useRef, useState } from 'react'
 import { Button, Chip, ToastOutlet, ToastProvider, type NavItem } from '@dejafix/common-frontend'
 import { useSharedStore } from './store'
-import { DeptSimulator } from './depts'
 import { Dep, Point } from './parts'
 import { AssistantBody, AssistantComposer, useAssistantChat } from './assistant'
 import { Activity, Aftercare, Audit, Autonomy, Links, Metrics, Ops, Reviews, Specs, Work } from './pages'
@@ -90,7 +89,7 @@ function Planning() {
   const [item, item2] = (tabs.length ? rest : [sub, ...rest]).map((x) => (x ? decodeURIComponent(x) : undefined))
   // 없는 화면 주소(예: 예전 '참여한 사건')는 들어온 요청으로 돌린다
   useEffect(() => {
-    if (!planning && section !== 'depts') location.replace('#/requests')
+    if (!planning) location.replace('#/requests')
   }, [planning, section])
 
   // 다른 부서에서 들어온 것: 기획개발 화면(요청·작업)을 볼 때까지 "새로"로 센다
@@ -108,7 +107,6 @@ function Planning() {
   const newWork = inbound.filter((x) => x.point !== 'message' && (x.seq ?? 0) > seenSeq).length
   const newTalk = inbound.filter((x) => x.point === 'message' && (x.seq ?? 0) > talkSeen).length
   const incoming = incomingCount(state)
-  const unreadOut = state.outbox.filter((m) => !m.read).length
   const recentIn = inbound.filter((x) => x.point !== 'message').slice(-3).reverse()
 
   const badge: Partial<Record<SectionId, number>> = { requests: newWork || incoming, talk: newTalk }
@@ -119,7 +117,6 @@ function Planning() {
       on: section === id,
       badge: badge[id] || 0,
     })),
-    { href: '#/depts', label: '다른 부서 (시뮬레이터)', on: section === 'depts', badge: unreadOut },
   ]
 
   return (
@@ -134,7 +131,7 @@ function Planning() {
           ))}
         </nav>
         <div className="pl-tools">
-          <Chip tone={connected ? 'green' : 'amber'} title={connected ? '시연용 목 데이터(PLANNING_MOCK=1). 연동 버스(127.0.0.1:8790)에 연결되어 기획개발 화면과 다른 부서 시뮬레이터가 같은 데이터를 봅니다.' : '시연용 목 데이터(PLANNING_MOCK=1). 연동 버스에 연결되지 않아 이 화면 혼자 동작합니다.'}>
+          <Chip tone={connected ? 'green' : 'amber'} title={connected ? '시연용 목 데이터(PLANNING_MOCK=1). 연동 버스(127.0.0.1:8790)에 연결되어 기획개발 화면과 다른 부서 화면이 같은 데이터를 봅니다.' : '시연용 목 데이터(PLANNING_MOCK=1). 연동 버스에 연결되지 않아 이 화면 혼자 동작합니다.'}>
             {connected ? '시연 데이터 · 연동 중' : '시연 데이터 · 단독'}
           </Chip>
           <ToastOutlet />
@@ -144,9 +141,7 @@ function Planning() {
         </div>
       </div>
 
-      {section === 'depts' ? (
-        <DeptSimulator s={state} d={dispatch} />
-      ) : planning ? (
+      {planning ? (
         <main className="page page-wide">
           {tabs.length > 0 && (
             <div className="subtabs" role="tablist" aria-label={`${SECTIONS[section].label} 메뉴`}>
