@@ -1,6 +1,7 @@
 import { Link } from "@/lib/nav";
 import { usePathname, useRouter } from "@/lib/nav";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { useAdmin } from "@/lib/admin";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useCart } from "@/lib/cart";
@@ -28,6 +29,7 @@ export function ShopShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const path = usePathname();
   const { user, logout } = useAuth();
+  const admin = useAdmin();
   const cart = useCart();
   const [cats, setCats] = useState<Category[]>([]);
   const [health, setHealth] = useState<Health | null>(null);
@@ -65,6 +67,7 @@ export function ShopShell({ children }: { children: ReactNode }) {
               <Link href="/login" className="hover:text-ink-900">데모 로그인</Link>
             )}
             <Link href="/orders" className="hover:text-ink-900">주문·배송</Link>
+            {admin.enabled && <Link href="/admin" className={`font-semibold hover:text-ink-900 ${path.startsWith("/admin") ? "text-brand-600" : "text-ink-700"}`}>관리자</Link>}
             <Link href={DASHBOARD_WEB_URL} className="hover:text-ink-900">상담원 콘솔</Link>
             <ThemeToggle />
           </div>
