@@ -12,6 +12,7 @@ import FinanceGuide from '@/pages/FinanceGuide'
 import Hr from '@/pages/Hr'
 import Orchestrator from '@/pages/Orchestrator'
 import Kb from '@/pages/Kb'
+import PlanningPage from '@/planning/PlanningPage'
 import Queue from '@/pages/Queue'
 import Reviews from '@/pages/Reviews'
 import Support from '@/pages/Support'
@@ -33,6 +34,7 @@ export function App() {
           <Route path="/orchestrator" element={<Orchestrator />} />
           <Route path="/data" element={<Data />} />
           <Route path="/hr" element={<Hr />} />
+          <Route path="/planning" element={<PlanningPage />} />
           <Route path="/agents/chat" element={<AgentChat />} />
           <Route path="/support" element={<Support />} />
           {/* catbooks 시절 /admin/* 주소 호환 */}
