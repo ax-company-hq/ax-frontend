@@ -1,17 +1,14 @@
 import { Link } from "@/lib/nav";
-import { Empty, NotReady, PageTitle } from "@/components/shop/bits";
+import { Empty, PageTitle, PriceSummary, useCartPrice } from "@/components/shop/bits";
 import { Cover } from "@/components/shop/Cover";
 import { useCart } from "@/lib/cart";
 import { hueOf, won } from "@/lib/format";
 
 export default function CartPage() {
   const cart = useCart();
+  const { price, error } = useCartPrice(cart.lines);
 
   if (!cart.lines.length) return <><PageTitle title="장바구니" /><Empty>담아 둔 상품이 없습니다. <Link href="/products" className="font-semibold text-brand-600 underline">상품 보러 가기</Link></Empty></>;
-
-  // 단가×수량의 단순 합계만 보여 준다. 배송비·최종 금액은 주문을 만들 때 서버가 계산한다.
-  // TODO(ax-backend#385): 장바구니 가격 API(api.cartPrice)가 생기면 배송비·합계를 여기에 연결한다.
-  const subtotal = cart.lines.reduce((n, l) => n + l.price * l.qty, 0);
 
   return (
     <div>
@@ -20,7 +17,7 @@ export default function CartPage() {
         <ul className="divide-y divide-ink-100 rounded-xl border border-ink-100 bg-surface">
           {cart.lines.map((l) => (
             <li key={l.id} className="flex gap-4 p-4">
-              <Link href={`/products/${l.id}`} className="w-20 shrink-0"><Cover title={l.title} hue={hueOf(l.id)} category={l.category} compact /></Link>
+              <Link href={`/products/${l.id}`} className="w-20 shrink-0"><Cover title={l.title} hue={hueOf(l.id)} category={l.category} productId={l.id} compact /></Link>
               <div className="min-w-0 flex-1">
                 <Link href={`/products/${l.id}`} className="line-clamp-2 break-keep text-sm font-semibold hover:underline">{l.title}</Link>
                 <div className="mt-2 flex items-center gap-3">
@@ -37,10 +34,7 @@ export default function CartPage() {
           ))}
         </ul>
         <aside className="h-fit rounded-xl border border-ink-100 bg-surface p-5 text-sm">
-          <dl className="space-y-2">
-            <div className="flex justify-between"><dt className="text-ink-500">상품 금액</dt><dd className="tabular-nums">{won(subtotal)}</dd></div>
-          </dl>
-          <div className="mt-3"><NotReady feature="배송비·결제 예정 금액 계산" /></div>
+          <PriceSummary price={price} error={error} />
           <Link href="/checkout" className="btn-primary mt-4 w-full py-3">주문하기</Link>
         </aside>
       </div>

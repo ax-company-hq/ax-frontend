@@ -3,10 +3,10 @@ import { useRouter, useSearchParams } from "@/lib/nav";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { Empty, ErrorNote, PageTitle, ProductCard } from "@/components/shop/bits";
 import { api } from "@/lib/api";
-import { categoryLabel } from "@/lib/labels";
+import { useCategories } from "@/lib/categories";
 import type { Product } from "@/lib/types";
 
-// TODO(ax-backend#385): 판매량순·신상품순과 서버 검색·카테고리 API가 생기면 서버 기준으로 바꾼다. 지금은 shop-api 상품 목록을 화면에서 거른다.
+// TODO(ax-backend#385): 판매량순·신상품순과 서버 검색이 생기면 서버 기준으로 바꾼다. 지금은 shop-api 상품 목록을 화면에서 거른다.
 const SORTS = [
   { key: "default", label: "기본순" },
   { key: "price_asc", label: "낮은 가격순" },
@@ -32,7 +32,7 @@ function List() {
 
   useEffect(() => { api.products().then(setAll).catch((e: Error) => setError(e.message)); }, []);
 
-  const cats = useMemo(() => [...new Set((all ?? []).map((p) => p.category_code))].sort(), [all]);
+  const { categories, label: categoryLabel } = useCategories();
   const items = useMemo(() => {
     if (!all) return null;
     const needle = q.trim().toLowerCase();
@@ -61,7 +61,7 @@ function List() {
         } />
       <div className="mb-6 flex flex-wrap gap-2">
         <Link href="/products" className={`chip py-1.5 text-xs ${!category ? "bg-brand-600 text-white" : "bg-ink-100 text-ink-700"}`}>전체</Link>
-        {cats.map((c) => (
+        {categories.map(({ category_code: c }) => (
           <Link key={c} href={`/products?category=${c}`}
             className={`chip py-1.5 text-xs ${category === c ? "bg-brand-600 text-white" : "bg-ink-100 text-ink-700"}`}>{categoryLabel(c)}</Link>
         ))}

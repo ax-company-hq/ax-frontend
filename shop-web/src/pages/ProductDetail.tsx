@@ -6,13 +6,14 @@ import { Cover } from "@/components/shop/Cover";
 import { api } from "@/lib/api";
 import { useCart } from "@/lib/cart";
 import { hueOf } from "@/lib/format";
-import { categoryLabel } from "@/lib/labels";
+import { useCategories } from "@/lib/categories";
 import type { Product } from "@/lib/types";
 
 export default function ProductPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const cart = useCart();
+  const { label: categoryLabel } = useCategories();
   const [p, setP] = useState<Product | null>(null);
   const [qty, setQty] = useState(1);
   const [error, setError] = useState<string | null>(null);
@@ -35,7 +36,7 @@ export default function ProductPage() {
         <Link href="/" className="hover:underline">홈</Link> › <Link href={`/products?category=${p.category_code}`} className="hover:underline">{categoryLabel(p.category_code)}</Link>
       </nav>
       <div className="grid gap-8 md:grid-cols-[320px_1fr]">
-        <div className="rounded-xl bg-surface-2 p-8"><Cover title={p.name} hue={hueOf(p.product_id)} category={p.category_code} className="mx-auto max-w-[240px]" /></div>
+        <div className="rounded-xl bg-surface-2 p-8"><Cover title={p.name} hue={hueOf(p.product_id)} category={p.category_code} productId={p.product_id} className="mx-auto max-w-[240px]" /></div>
         <div>
           <p className="text-xs font-semibold text-brand-600">{categoryLabel(p.category_code)}</p>
           <h1 className="mt-1 break-keep text-2xl font-bold leading-snug">{p.name}</h1>

@@ -38,3 +38,15 @@ export interface Claim {
   lines: { order_item_id: string; title: string; qty: number; requested_qty: number; unit_price: number; refund_cash: number; points_back: number }[];
   shipping_refund: number; expected_refund: number; points_back: number; refund_paid: number; processed_at: string | null;
 }
+
+// ---------------------------------------------------------------- 데모 사용자·카테고리·장바구니 가격
+/** 가명 구매자. 이름은 표시용 데모 이름이고 개인정보·적립금은 없다. */
+export interface DemoUser { buyer_id: string; display_name: string }
+/** 표시 이름(`name`)을 모르는 코드는 null이다. 지어내지 않고 코드를 그대로 보여 준다. */
+export interface Category { category_code: string; name: string | null; product_count: number }
+export interface CartPriceItem { product_id: string; title: string; qty: number; unit_price: number; line_amount: number }
+/** 저장하지 않는 계산 결과. 금액은 모두 서버 값이고 화면에서 다시 계산하지 않는다. `coupon_discount`는 항상 null(+사유)이다. */
+export interface CartPrice {
+  items: CartPriceItem[]; subtotal: number; shipping_fee: number; free_shipping_from: number;
+  coupon_discount: number | null; coupon_unknown_reason: string | null; points_used: number; payable_amount: number;
+}

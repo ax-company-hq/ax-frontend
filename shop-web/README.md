@@ -5,7 +5,7 @@
 ## 1. 역할
 캣북스(catbooks) 데모 서점의 판매 사이트. [`bxbae/iTshirt-cat`](https://github.com/bxbae/iTshirt-cat)의 Next.js 프론트엔드에서 Vite로 옮겨 왔고, 지금은 **우리 shop-api(`/api/shop/*`, 8010)만** 부른다(캣북스 백엔드는 쓰지 않는다).
 상품 목록·상세, 장바구니, 주문·가짜 결제, 주문 내역, 취소·반품·교환 신청(고객지원이 판정)을 한다.
-로그인은 없다: `/login`에서 구매자 가명 ID(`buy_0001`~`buy_0030`)를 고르면 주문 요청 본문의 `buyer_id`로 실린다(sessionStorage 보관).
+로그인(비밀번호)은 없다: `/login`에서 shop-api의 데모 구매자 목록(가명 ID + 표시 이름)에서 한 명을 고르면 주문 요청 본문의 `buyer_id`로 실린다(ID만 sessionStorage 보관).
 
 | 경로 | 화면 |
 | --- | --- |
@@ -42,19 +42,25 @@ API 주소는 루트 `.env`의 `VITE_SHOP_API_URL`(기본 `http://localhost:8010
 | --- | --- | --- |
 | GET | `/api/shop/products?category_code`, `/api/shop/products/{id}` | 상품 목록·상세 |
 | GET | `/api/shop/orders?buyer_id`, `/api/shop/orders/{id}` | 주문 내역·상세 |
+| GET | `/api/shop/users`, `/api/shop/users/{id}` | 데모 구매자 목록·조회(가명 ID + 표시 이름, 적립금 없음) |
+| POST | `/api/shop/sessions` | 구매자 선택 확인(토큰 없음) |
+| GET | `/api/shop/categories` | 카테고리 목록(표시 이름이 null이면 코드를 그대로 표시) |
+| POST | `/api/shop/cart/price` | 장바구니·결제 전 금액 미리보기(배송비·결제액은 서버 값, 쿠폰 할인은 null이면 "확인 필요") |
 | POST | `/api/shop/orders` | 주문 생성(`pending_payment`, 합계·배송비는 서버 계산) |
 | POST | `/api/shop/orders/{id}/payments` | 가짜 결제 |
 | POST | `/api/shop/orders/{id}/cancel` | 결제 전 주문 취소 |
 | POST | `/api/shop/claims` | 취소·반품·교환 신청(고객지원으로 전달) |
 
 ### 준비 중인 기능 (ax-backend#385 결과를 기다림)
-shop-api에 아직 없어서 화면에서 오류 대신 "준비 중" 안내를 보여 준다. 코드에는 `TODO(ax-backend#385)`가 붙어 있고, 연결 자리는 `api.ts` 아래쪽 스텁(`demoUsers`·`categories`·`cartPrice`·`previewClaim`·`claims`·`inquiries`·`reviews`)이다.
+shop-api에 아직 없어서 화면에서 오류 대신 "준비 중" 안내를 보여 준다. 코드에는 `TODO(ax-backend#385)`가 붙어 있고, 연결 자리는 `api.ts` 아래쪽 스텁(`previewClaim`·`claims`·`inquiries`·`reviews`)이다.
 
-- 이름·적립금이 있는 데모 로그인 (지금은 구매자 가명 ID 선택)
-- 카테고리 목록 (지금은 상품의 `category_code`를 화면에서 묶음), 판매량순·신상품순 정렬, 서버 검색
-- 장바구니 가격(배송비·합계) 미리보기, 적립금 사용
+- 적립금 조회·사용, 쿠폰 입력·할인 (쿠폰 할인은 가격 미리보기에서 "확인 필요"로 표시)
+- 판매량순·신상품순 정렬, 서버 검색
 - 클레임 환불액 미리보기, 신청 내역 조회·철회·사진 추가
 - 1:1 문의, 구매 후기
+
+### 상품 표지 사진
+상품 표지는 `shop-web/public/covers/<product_id>.jpg`(예: `prd_0001.jpg`, png·webp도 됨)에 파일을 두면 사진으로 나오고, 파일이 없거나 불러오지 못하면 상품마다 색으로 만든 제목 카드(`Cover.tsx`)로 돌아간다. 비율은 책 3:4, 문구·굿즈 1:1로 잘리므로 같은 비율로 준비한다. 사진은 상업적으로 써도 되는 라이선스(직접 촬영, Unsplash·Pexels·Pixabay 등)만 쓰고, 출처와 라이선스는 PR 설명에 적는다.
 
 ## 4. common-frontend
 `@dejafix/common-frontend`를 git 태그(`git+https://github.com/DejaFix/common-frontend.git#v0.1.0`)로 설치해 두었다.

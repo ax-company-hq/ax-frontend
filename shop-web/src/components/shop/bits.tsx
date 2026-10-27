@@ -1,8 +1,10 @@
 import { Link } from "@/lib/nav";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { hueOf, won } from "@/lib/format";
-import { categoryLabel } from "@/lib/labels";
-import type { Product } from "@/lib/types";
+import { useCategories } from "@/lib/categories";
+import { api } from "@/lib/api";
+import type { CartLine } from "@/lib/cart";
+import type { CartPrice, Product } from "@/lib/types";
 import { Cover } from "./Cover";
 
 export function Price({ amount, big = false }: { amount: number; big?: boolean }) {
@@ -11,15 +13,16 @@ export function Price({ amount, big = false }: { amount: number; big?: boolean }
 
 export function ProductCard({ p }: { p: Product }) {
   const soldOut = p.stock <= 0;
+  const { label } = useCategories();
   return (
     <Link href={`/products/${p.product_id}`} className="group flex w-full flex-col gap-2">
       <div className="relative rounded-md bg-surface-2 p-4 transition group-hover:bg-ink-100">
-        <Cover title={p.name} hue={hueOf(p.product_id)} category={p.category_code} className="mx-auto max-w-[170px]" />
+        <Cover title={p.name} hue={hueOf(p.product_id)} category={p.category_code} productId={p.product_id} className="mx-auto max-w-[170px]" />
         {soldOut && <span className="absolute left-2 top-2 chip bg-ink-900 text-surface">일시품절</span>}
       </div>
       <div className="min-w-0">
         <h3 className="line-clamp-2 break-keep text-sm font-semibold leading-snug group-hover:underline">{p.name}</h3>
-        <p className="mt-0.5 truncate text-xs text-ink-500">{categoryLabel(p.category_code)}</p>
+        <p className="mt-0.5 truncate text-xs text-ink-500">{label(p.category_code)}</p>
         <div className="mt-1.5"><Price amount={p.price} /></div>
       </div>
     </Link>
@@ -87,5 +90,46 @@ export function NotReady({ feature, children }: { feature: string; children?: Re
       <p className="mt-1 text-xs">판매 서버(shop-api)에 아직 없는 기능이라 열리면 이 자리에 연결됩니다.</p>
       {children}
     </div>
+  );
+}
+
+/** 장바구니 금액 미리보기(`POST /api/shop/cart/price`). 담긴 품목·수량이 바뀌면 서버에 다시 묻는다. */
+export function useCartPrice(lines: CartLine[]) {
+  const [price, setPrice] = useState<CartPrice | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const key = lines.map((l) => `${l.id}:${l.qty}`).join(",");
+  useEffect(() => {
+    if (!lines.length) { setPrice(null); setError(null); return; }
+    let live = true;
+    setError(null);
+    api.cartPrice(lines.map((l) => ({ product_id: l.id, qty: l.qty })))
+      .then((p) => live && setPrice(p))
+      .catch((e: Error) => { if (live) { setPrice(null); setError(e.message); } });
+    return () => { live = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+  return { price, error };
+}
+
+/** 서버가 계산한 금액을 그대로 보여 준다. 쿠폰 할인은 값이 없으면(null) 0원·빈칸이 아니라 "확인 필요"로 그린다. */
+export function PriceSummary({ price, error }: { price: CartPrice | null; error: string | null }) {
+  if (error) return <ErrorNote error={error} />;
+  if (!price) return <p className="text-xs text-ink-500">금액을 계산하는 중…</p>;
+  return (
+    <dl className="space-y-2">
+      <div className="flex justify-between"><dt className="text-ink-500">상품 금액</dt><dd className="tabular-nums">{won(price.subtotal)}</dd></div>
+      <div className="flex justify-between"><dt className="text-ink-500">배송비</dt><dd className="tabular-nums">{price.shipping_fee === 0 ? "무료" : won(price.shipping_fee)}</dd></div>
+      <div className="flex justify-between gap-3">
+        <dt className="text-ink-500">쿠폰 할인</dt>
+        <dd className="text-right">
+          {price.coupon_discount === null
+            ? <><span className="font-semibold text-amber-700">확인 필요</span>{price.coupon_unknown_reason && <span className="mt-0.5 block text-[11px] text-ink-500">{price.coupon_unknown_reason}</span>}</>
+            : <span className="tabular-nums">{won(price.coupon_discount)}</span>}
+        </dd>
+      </div>
+      {price.points_used > 0 && <div className="flex justify-between"><dt className="text-ink-500">적립금 사용</dt><dd className="tabular-nums">{won(price.points_used)}</dd></div>}
+      <div className="flex justify-between border-t border-ink-100 pt-2 font-bold"><dt>결제 예정 금액</dt><dd className="tabular-nums">{won(price.payable_amount)}</dd></div>
+      <p className="text-[11px] text-ink-500">{won(price.free_shipping_from)} 이상 구매하면 배송비가 무료입니다. 최종 금액은 주문 상세에서 확인할 수 있어요.</p>
+    </dl>
   );
 }
