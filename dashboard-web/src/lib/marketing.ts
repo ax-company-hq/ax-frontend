@@ -26,7 +26,7 @@ export interface CouponRecord {
   unit_price: number;
   requested_by: "support";
   at: string;
-  // A: 마케팅이 바로 발급. C: 한도 초과·금액 불일치로 safety 보류 큐에서 사람 결정을 기다림
+  // A: 마케팅이 바로 발급. C: 기준 이상·금액 불일치로 안전 장치 보류 큐에서 사람 결정을 기다림
   grade: "A" | "C";
   hold_reason?: "limit_exceeded" | "amount_mismatch";
 }
@@ -68,19 +68,20 @@ export const NOTICES: PublishedNotice[] = [
   },
 ];
 
+// C 건은 10분이 지나면 자동 거절되므로, 대기로 보이는 건은 10분 안쪽으로 둔다.
 export const COUPONS: CouponRecord[] = [
-  { record_id: "cpn_0007", context_id: "ctx_inc_0100", sequence: 1, purpose_code: "compensation", count: 12, unit_price: 1000, requested_by: "support", at: iso(60), grade: "A" },
-  { record_id: "cpn_0008", context_id: "ctx_inc_0100", sequence: 2, purpose_code: "compensation", count: 30, unit_price: 1000, requested_by: "support", at: iso(58), grade: "A" },
-  { record_id: "cpn_0009", context_id: "ctx_inc_0100", sequence: 3, purpose_code: "compensation", count: 400, unit_price: 5000, requested_by: "support", at: iso(55), grade: "C", hold_reason: "limit_exceeded" },
-  { record_id: "cpn_0010", context_id: "ctx_inc_0100", sequence: 4, purpose_code: "compensation", count: 8, unit_price: 1000, requested_by: "support", at: iso(50), grade: "C", hold_reason: "amount_mismatch" },
+  { record_id: "cpn_0007", context_id: "ctx_inc_0100", sequence: 1, purpose_code: "compensation", count: 12, unit_price: 1000, requested_by: "support", at: iso(14), grade: "A" },
+  { record_id: "cpn_0008", context_id: "ctx_inc_0100", sequence: 2, purpose_code: "compensation", count: 30, unit_price: 1000, requested_by: "support", at: iso(13), grade: "A" },
+  { record_id: "cpn_0009", context_id: "ctx_inc_0100", sequence: 3, purpose_code: "compensation", count: 400, unit_price: 5000, requested_by: "support", at: iso(9), grade: "C", hold_reason: "limit_exceeded" },
+  { record_id: "cpn_0010", context_id: "ctx_inc_0100", sequence: 4, purpose_code: "compensation", count: 8, unit_price: 1000, requested_by: "support", at: iso(6), grade: "C", hold_reason: "amount_mismatch" },
 ];
 
 export const ACTIVITY: MarketingActivity[] = [
+  { at: iso(6), skill: "issue_coupon", grade: "C", summary: "cpn_0010 금액 불일치: 사람 확인 대기로 보류" },
+  { at: iso(9), skill: "issue_coupon", grade: "C", summary: "cpn_0009 기준 이상: 사람 확인 대기로 보류" },
+  { at: iso(13), skill: "issue_coupon", grade: "A", summary: "cpn_0008 발급 (순번 2, 30건 x 1,000원)" },
+  { at: iso(14), skill: "issue_coupon", grade: "A", summary: "cpn_0007 발급 (순번 1, 12건 x 1,000원)" },
   { at: iso(18), skill: "draft_notice", grade: "read", summary: "결제 정상화 공지 초안 drf_0004 작성 (사실 필드만 사용)" },
-  { at: iso(50), skill: "issue_coupon", grade: "C", summary: "cpn_0010 금액 불일치: 사람 확인 대기로 보류" },
-  { at: iso(55), skill: "issue_coupon", grade: "C", summary: "cpn_0009 한도 초과: 사람 확인 대기로 보류" },
-  { at: iso(58), skill: "issue_coupon", grade: "A", summary: "cpn_0008 발급 (순번 2, 30건 x 1,000원)" },
-  { at: iso(60), skill: "issue_coupon", grade: "A", summary: "cpn_0007 발급 (순번 1, 12건 x 1,000원)" },
   { at: iso(88), skill: "publish_notice", grade: "A", summary: "ntc_0012 게시 (배너, 메일)" },
   { at: iso(89), skill: "draft_notice", grade: "read", summary: "결제 장애 공지 초안 drf_0002 작성 (원인은 적지 않음)" },
   { at: iso(300), skill: "publish_notice", grade: "A", summary: "drf_0003 게시 거절: 채널 미지정" },
@@ -88,5 +89,6 @@ export const ACTIVITY: MarketingActivity[] = [
 
 export const KIND_KO: Record<NoticeKind, string> = { outage: "장애", recovery: "정상화", maintenance: "점검" };
 export const CHANNEL_KO: Record<NoticeChannel, string> = { banner: "배너", email: "메일", sns: "SNS" };
-export const HOLD_KO = { limit_exceeded: "한도 초과", amount_mismatch: "금액 불일치" } as const;
+export const HOLD_KO = { limit_exceeded: "기준 이상", amount_mismatch: "금액 불일치" } as const;
+export const SKILL_KO: Record<string, string> = { draft_notice: "공지 초안 작성", publish_notice: "공지 게시", issue_coupon: "쿠폰 발급" };
 export const PURPOSE_KO: Record<CouponPurpose, string> = { campaign: "캠페인", compensation: "보상" };
