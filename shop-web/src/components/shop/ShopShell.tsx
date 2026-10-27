@@ -1,11 +1,10 @@
 import { Link } from "@/lib/nav";
 import { usePathname, useRouter } from "@/lib/nav";
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
-import { api } from "@/lib/api";
+import { useState, type FormEvent, type ReactNode } from "react";
 import { useAuth } from "@/lib/auth";
 import { useCart } from "@/lib/cart";
 import { DASHBOARD_WEB_URL } from "@/lib/env";
-import { categoryLabel } from "@/lib/labels";
+import { useCategories } from "@/lib/categories";
 import { IconCart, IconSearch, IconUser } from "../icons";
 import { ThemeToggle } from "../ThemeToggle";
 
@@ -23,13 +22,8 @@ export function ShopShell({ children }: { children: ReactNode }) {
   const path = usePathname();
   const { user, logout } = useAuth();
   const cart = useCart();
-  const [cats, setCats] = useState<string[]>([]);
+  const { categories, label } = useCategories();
   const [q, setQ] = useState("");
-
-  useEffect(() => {
-    // TODO(ax-backend#385): 카테고리 API가 생기면 api.categories로 바꾼다. 지금은 상품의 category_code를 묶는다.
-    api.products().then((ps) => setCats([...new Set(ps.map((p) => p.category_code))].sort())).catch(() => setCats([]));
-  }, []);
 
   function search(e: FormEvent) {
     e.preventDefault();
@@ -38,7 +32,7 @@ export function ShopShell({ children }: { children: ReactNode }) {
 
   const nav = [
     { href: "/products", label: "전체 상품" },
-    ...cats.map((c) => ({ href: `/products?category=${c}`, label: categoryLabel(c) })),
+    ...categories.map((c) => ({ href: `/products?category=${c.category_code}`, label: label(c.category_code) })),
     { href: "/support", label: "고객센터" },
   ];
 
@@ -50,7 +44,7 @@ export function ShopShell({ children }: { children: ReactNode }) {
           <div className="ml-auto flex flex-wrap items-center gap-x-4 gap-y-1 whitespace-nowrap">
             {user ? (
               <>
-                <span className="font-mono font-medium text-ink-700">{user.id}</span>
+                <span className="font-medium text-ink-700">{user.name ?? user.id}</span>
                 <button className="hover:text-ink-900" onClick={() => { logout(); router.push("/"); }}>선택 해제</button>
               </>
             ) : (

@@ -28,7 +28,7 @@ export default function Home() {
   useEffect(() => {
     api.products().then(setAll).catch((e: Error) => setError(e.message));
   }, []);
-  // TODO(ax-backend#385): 판매량순·신상품순·카테고리 API가 생기면 선반을 서버 기준으로 바꾼다. 지금은 상품 목록을 화면에서 나눈다.
+  // TODO(ax-backend#385): 판매량순·신상품순 API가 생기면 선반을 서버 기준으로 바꾼다. 지금은 상품 목록을 화면에서 나눈다.
   const books = all.filter((p) => p.category_code === "book").slice(0, 5);
   const goods = all.filter((p) => p.category_code === "stationery").slice(0, 5);
 
