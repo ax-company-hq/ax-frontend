@@ -50,14 +50,15 @@ API 주소는 루트 `.env`의 `VITE_SHOP_API_URL`(기본 `http://localhost:8010
 | POST | `/api/shop/orders/{id}/payments` | 가짜 결제 |
 | POST | `/api/shop/orders/{id}/cancel` | 결제 전 주문 취소 |
 | POST | `/api/shop/claims` | 취소·반품·교환 신청(고객지원으로 전달) |
+| POST | `/api/shop/inquiries` | 1:1 문의 접수(주문 선택 필수, 토큰 없음, 구매자당 5/분, 본문 2000자·제목 100자, 같은 내용은 10분 안에 같은 접수). ax-backend #419 머지 후 동작 |
 
 ### 준비 중인 기능 (ax-backend#385 결과를 기다림)
-shop-api에 아직 없어서 화면에서 오류 대신 "준비 중" 안내를 보여 준다. 코드에는 `TODO(ax-backend#385)`가 붙어 있고, 연결 자리는 `api.ts` 아래쪽 스텁(`previewClaim`·`claims`·`inquiries`·`reviews`)이다.
+shop-api에 아직 없어서 화면에서 오류 대신 "준비 중" 안내를 보여 준다. 코드에는 `TODO(ax-backend#385)`가 붙어 있고, 연결 자리는 `api.ts` 아래쪽 스텁(`previewClaim`·`claims`·`inquiryHistory`·`reviews`)이다.
 
 - 적립금 조회·사용, 쿠폰 입력·할인 (쿠폰 할인은 가격 미리보기에서 "확인 필요"로 표시)
 - 판매량순·신상품순 정렬, 서버 검색
 - 클레임 환불액 미리보기, 신청 내역 조회·철회·사진 추가
-- 1:1 문의, 구매 후기
+- 1:1 문의 내역 조회(접수는 가능), 구매 후기
 
 ### 상품 표지 사진
 상품 표지는 `shop-web/public/covers/<product_id>.jpg`(예: `prd_0001.jpg`, png·webp도 됨)에 파일을 두면 사진으로 나오고, 파일이 없거나 불러오지 못하면 상품마다 색으로 만든 제목 카드(`Cover.tsx`)로 돌아간다. 비율은 책 3:4, 문구·굿즈 1:1로 잘리므로 같은 비율로 준비한다. 사진은 상업적으로 써도 되는 라이선스(직접 촬영, Unsplash·Pexels·Pixabay 등)만 쓰고, 출처와 라이선스는 PR 설명에 적는다.
