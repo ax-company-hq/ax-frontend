@@ -1,6 +1,6 @@
 import { Link } from "@/lib/nav";
 import { useRouter } from "@/lib/nav";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Empty, ErrorNote, PageTitle, PriceSummary, RequireLogin, useCartPrice } from "@/components/shop/bits";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -14,11 +14,13 @@ export default function CheckoutPage() {
   const [method, setMethod] = useState("card");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const inflight = useRef(false); // 연속 클릭으로 주문이 두 번 만들어지지 않게 하는 플래그
   const { price, error: priceError } = useCartPrice(cart.lines);
 
   // 주문 생성(pending_payment) → 가짜 결제. 합계·배송비는 서버 응답이 정한다.
   async function submit() {
-    if (!user) return;
+    if (!user || inflight.current) return;
+    inflight.current = true;
     setBusy(true);
     setError(null);
     try {
@@ -29,6 +31,7 @@ export default function CheckoutPage() {
       router.push(`/orders/${order.order_id}?placed=1`);
     } catch (e) {
       setError((e as Error).message);
+      inflight.current = false;
       setBusy(false);
     }
   }
