@@ -51,7 +51,8 @@ export function ShopShell({ children }: { children: ReactNode }) {
               <Link href="/login" className="hover:text-ink-900">구매자 선택</Link>
             )}
             <Link href="/orders" className="hover:text-ink-900">주문·배송</Link>
-            <Link href={DASHBOARD_WEB_URL} className="hover:text-ink-900">상담원 콘솔</Link>
+            {/* 다른 앱(게이트웨이의 /admin/)이라 라우터 Link가 아니라 일반 <a>로 연다. Link는 http(s)가 아니면 쇼핑몰 안 경로로 처리한다 */}
+            <a href={DASHBOARD_WEB_URL} className="hover:text-ink-900">상담원 콘솔</a>
             <ThemeToggle />
           </div>
         </div>
@@ -114,6 +115,7 @@ export function ShopShell({ children }: { children: ReactNode }) {
           <Link href="/terms" className="font-semibold text-ink-700 hover:underline">이용약관</Link>
           <Link href="/buyer-terms" className="font-semibold text-ink-700 hover:underline">구매자 이용약관</Link>
           <Link href="/privacy" className="font-semibold text-ink-700 hover:underline">개인정보처리방침</Link>
+          <a href={DASHBOARD_WEB_URL} className="ml-auto text-ink-500 hover:underline">관리자</a>
         </nav>
       </footer>
     </div>
