@@ -4,7 +4,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { api } from "@/lib/api";
 import { SHOP_WEB_URL } from "@/lib/env";
 import type { Health } from "@/lib/types";
-import { IconAgents, IconBell, IconBolt, IconChart, IconDashboard, IconMegaphone, IconPlan, IconSearch, IconShield, IconUsers } from "../icons";
+import { IconAgents, IconBell, IconBolt, IconChart, IconDashboard, IconMegaphone, IconOffice, IconPlan, IconSearch, IconShield, IconUsers } from "../icons";
 import { ThemeToggle } from "../ThemeToggle";
 import { IconUser } from "../icons";
 
@@ -18,6 +18,7 @@ const NAV = [
   { href: "/planning", label: "기획개발 AI", Icon: IconPlan },
   { href: "/agents/chat", label: "AI 대화방", Icon: IconAgents },
   { href: "/support", label: "고객지원 AI", Icon: IconUser },
+  { href: "/agents/office", label: "AI 오피스", Icon: IconOffice },
 ];
 
 const isActive = (path: string, href: string) => (href === "/" ? path === "/" : path.startsWith(href));
