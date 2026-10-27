@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuditSection } from "@/components/finance/Audit";
 import { ClosingSection } from "@/components/finance/Closing";
 import { Chip, ErrorBox, MetaLine, MockBadge, TONE, Waiting, useResource } from "@/components/finance/bits";
@@ -271,7 +272,9 @@ export default function FinancePage() {
 
       {mode === "incident" && (
         <div role="tabpanel" id="mode-panel-incident" aria-labelledby="mode-incident">
-          <IncidentFinance list={incidents} selected={selectedIncident} onSelect={(id) => openIncident(id)} tick={tick} onGoToQueue={goToQueue} />
+          <ErrorBoundary title="사건 화면을 그리지 못했습니다">
+            <IncidentFinance list={incidents} selected={selectedIncident} onSelect={(id) => openIncident(id)} tick={tick} onGoToQueue={goToQueue} />
+          </ErrorBoundary>
         </div>
       )}
 

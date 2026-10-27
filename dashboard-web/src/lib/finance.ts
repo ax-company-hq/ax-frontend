@@ -139,7 +139,6 @@ export interface IncidentSummary {
   compensation_total: number;
   coupon_count: number;
   held_count: number;
-  loss_total: number | null;
   checks_ok: boolean | null;
 }
 
@@ -184,19 +183,9 @@ export interface IncidentLimits {
   per_incident: { limit: number | null; used: number; remaining: number | null };
 }
 
-export interface IncidentLoss {
-  damage_amount: number | null;
-  compensation_total: number;
-  total: number | null;
-  status: "complete" | "partial";
-  missing: string[];
-}
-
 export type IncidentCheckCode = "recipients_in_impact" | "one_coupon_per_buyer" | "per_customer_limit" | "per_incident_limit" | "amount_recheck";
 export interface IncidentCheck { code: IncidentCheckCode | string; ok: boolean | null; title: string; detail: string; refs: string[] }
 
-export type IncidentStepStatus = "done" | "waiting" | "unavailable";
-export interface IncidentStep { no: string; title: string; status: IncidentStepStatus; detail: string }
 
 export interface IncidentDetail {
   context_id: string;
@@ -205,9 +194,7 @@ export interface IncidentDetail {
   impact: IncidentImpact | null;
   compensation: IncidentCompensation;
   limits: IncidentLimits;
-  loss: IncidentLoss;
   checks: IncidentCheck[];
-  steps: IncidentStep[];
   ledger_source: LedgerSource;
 }
 
@@ -253,18 +240,6 @@ export interface Review {
 
 // ---------------------------------------------------------------- 유지되는 기능
 export interface MarketOp { skill: "seller_review" | "settlement_hold"; seller_id: string; decision?: string; status?: string; risk_score?: number | null; reason_code: string; review_id: string | null; at: string }
-export interface LossReport {
-  context_id: string;
-  failed_orders: number | null;
-  affected_customers: number | null;
-  lost_amount: number | null;
-  compensation_coupon_count: number;
-  compensation_total: number;
-  total_loss: number | null;
-  summary: string;
-  at: string;
-}
-
 export interface SelfTestCheck { name: string; ok: boolean; detail: string; level: "fail" | "warn" }
 export interface SelfTest {
   result: "pass" | "warn" | "fail";
@@ -380,7 +355,6 @@ export const finance = {
 
   // 유지
   marketOps: () => data(fin<{ data: MarketOp[] }>("/api/finance/market-ops")),
-  lossReports: () => data(fin<{ data: LossReport[] }>("/api/finance/loss-reports")),
   /** 재무 AI 테스트를 지금 한 번 더 한다(서버는 10분마다 자동으로 한다). 가짜 자료로 점검해 상태를 바꾸지 않음 */
   selfTest: () => data(fin<{ data: SelfTest }>("/api/finance/self-test")),
   /** 가장 최근 테스트 결과(자동·직접) + 다음 자동 테스트 시각 */
