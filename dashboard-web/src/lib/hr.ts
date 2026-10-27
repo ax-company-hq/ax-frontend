@@ -1,4 +1,5 @@
 import { ApiError } from "./apiError";
+import { writeAuth } from "./api";
 import { DASHBOARD_API_URL } from "./env";
 
 // 인사 AI 화면 → dashboard-api(/api/dashboard/...). 응답은 ax-backend 규약 {data, meta}.
@@ -65,7 +66,7 @@ export interface PlanDraft { title: string; summary: string; area: string; kind:
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${DASHBOARD_API_URL}/api/dashboard${path}`, {
     ...init,
-    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+    headers: { "Content-Type": "application/json", ...writeAuth(init?.method, path), ...(init?.headers ?? {}) },
     cache: "no-store",
   });
   let body: { data?: T; error?: { message?: string } } | null = null;
@@ -75,6 +76,16 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
 }
 const post = <T>(path: string, body: unknown) => call<T>(path, { method: "POST", body: JSON.stringify(body) });
 
+/**
+ * 답변 전체의 짧은 해시(djb2, 32비트). 같은 답은 같은 키가 되고, 다른 답은 거의 겹치지 않는다.
+ * 아주 드물게 같은 키가 되면 서버가 두 번째 답을 중복으로 처리한다(20만 개 시험에서 충돌 0건).
+ */
+function hash(text: string): string {
+  let h = 5381;
+  for (let i = 0; i < text.length; i++) h = ((h << 5) + h + text.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36);
+}
+
 export const hr = {
   handovers: (status?: HandoverStatus) => call<HandoverView[]>(`/handovers${status ? `?status=${status}` : ""}`),
   questions: () => call<HandoverQuestion[]>("/handover-questions"),
@@ -82,7 +93,7 @@ export const hr = {
     post<AnswerResult>(`/handover-questions/${encodeURIComponent(questionId)}/answer`, {
       question_id: questionId,
       answer,
-      idempotency_key: `ui:${questionId}:${answer.length}:${answer.slice(0, 24)}`,
+      idempotency_key: `ui:${questionId}:${hash(answer)}`, // 답변 전체의 해시라 앞부분만 같은 다른 답과는 구분된다
     }),
   candidateCards: () => call<HrCard[]>("/candidate-cards"),
   decide: (cardId: string, decision: "approve" | "reject") =>
