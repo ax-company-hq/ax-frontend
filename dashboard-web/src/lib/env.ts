@@ -25,3 +25,5 @@ export const RELAY_TOKEN = import.meta.env.VITE_SHOP_ADMIN_TOKEN || (import.meta
 export const DATA_A2A_URL = import.meta.env.VITE_DATA_A2A_URL ?? '/data-a2a'
 /** 데이터 AI 직접 조회 토큰. 목 모드 전용(예: mock:dashboard-api). 비어 있으면 KPI 실시간 조회를 하지 않는다. 브라우저 저장소에 두지 않는다 */
 export const DATA_A2A_TOKEN = import.meta.env.VITE_DATA_A2A_TOKEN ?? ''
+/** 사람 토큰이 설정돼 있는지. 없으면 쓰기 버튼을 끄고 안내한다 */
+export const HUMAN_TOKEN_SET = SAFETY_HUMAN_TOKEN.length > 0

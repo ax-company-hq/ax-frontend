@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { Loading } from "@/components/admin/bits";
+import { HUMAN_TOKEN_SET } from "@/lib/env";
 import { ago, shortDateTime } from "@/lib/format";
 import {
   hr,
@@ -121,6 +122,7 @@ export default function HrPage() {
             대부분의 기록은 인사 AI가 근거를 보고 바로 남깁니다. 근거가 약해 확신이 낮은 기록과, 인계자만 알 수 있는 내용만 여기로 옵니다.
           </p>
         </div>
+        {!HUMAN_TOKEN_SET && todo > 0 && <p className="mt-3 text-xs text-amber-800">사람 권한(VITE_SAFETY_HUMAN_TOKEN)이 설정되지 않아 버튼이 꺼져 있습니다.</p>}
         {todo > 0 && (
           <div className="mt-5 space-y-3">
             <Candidates cards={cards} onChanged={load} />
@@ -180,8 +182,8 @@ function Candidates({ cards, onChanged }: { cards: HrCard[]; onChanged: () => vo
             <p className="mt-1.5 text-xs text-ink-500">{c.author}가 {ago(c.created_at)} 올림</p>
           </div>
           <div className="flex gap-2 sm:flex-col">
-            <button className="btn-primary" disabled={busy !== null} onClick={() => decide(c, "approve")}>기록으로 확정</button>
-            <button className="btn-ghost" disabled={busy !== null} onClick={() => decide(c, "reject")}>폐기</button>
+            <button className="btn-primary" disabled={!HUMAN_TOKEN_SET || busy !== null} onClick={() => decide(c, "approve")}>기록으로 확정</button>
+            <button className="btn-ghost" disabled={!HUMAN_TOKEN_SET || busy !== null} onClick={() => decide(c, "reject")}>폐기</button>
           </div>
         </article>
       ))}
@@ -207,7 +209,7 @@ function QuestionForm({ q, onDone }: { q: HandoverQuestion; onDone: () => void }
       </p>
       <div className="flex gap-2">
         <input className={INPUT} value={text} onChange={(e) => setText(e.target.value)} placeholder={`${q.assignee_id} 님의 답변`} />
-        <button className="btn-primary shrink-0" disabled={busy || !text.trim()}>답하기</button>
+        <button className="btn-primary shrink-0" disabled={!HUMAN_TOKEN_SET || busy || !text.trim()}>답하기</button>
       </div>
       {err && <p role="alert" className="text-xs text-red-700">{err}</p>}
     </form>

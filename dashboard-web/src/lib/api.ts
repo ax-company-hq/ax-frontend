@@ -26,14 +26,19 @@ function toError(body: unknown, status: number): ApiError {
   return new ApiError(typeof detail === "string" ? detail : `요청 실패 (${status})`, status);
 }
 
-/** 쓰기(GET 외) 요청에는 사람 토큰을 붙인다 (ax-backend #295). 토큰이 없으면 서버가 401로 거절한다 */
-const writeAuth = (method?: string): Record<string, string> =>
-  method && method !== "GET" && SAFETY_HUMAN_TOKEN ? { Authorization: `Bearer ${SAFETY_HUMAN_TOKEN}` } : {};
+/**
+ * 쓰기(GET 외) 요청에는 사람 토큰을 붙인다 (ax-backend #295). 토큰이 없으면 서버가 401로 거절한다.
+ * `/plan-checks`는 저장하지 않는 조회라 POST여도 붙이지 않는다. 인사 화면(`hr.ts`)도 이 함수를 쓴다.
+ */
+export const writeAuth = (method?: string, path = ""): Record<string, string> =>
+  method && method !== "GET" && !path.includes("/plan-checks") && SAFETY_HUMAN_TOKEN
+    ? { Authorization: `Bearer ${SAFETY_HUMAN_TOKEN}` }
+    : {};
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     ...init,
-    headers: { "Content-Type": "application/json", ...writeAuth(init?.method), ...(init?.headers ?? {}) },
+    headers: { "Content-Type": "application/json", ...writeAuth(init?.method, path), ...(init?.headers ?? {}) },
     cache: "no-store",
   });
   if (!res.ok) {
