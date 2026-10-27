@@ -125,6 +125,18 @@ function Planning() {
 
   return (
     <div className="main">
+      <header className="pl-head">
+        <div>
+          <h1 className="pl-title">기획개발 AI</h1>
+          <p className="pl-desc">다른 부서의 요청을 기획서·작업·PR로 처리하고, 결과를 요청한 부서에 알립니다.</p>
+        </div>
+        <div className="pl-tools">
+          <Chip tone={connected ? 'green' : 'amber'} title={`기획개발 서버 ${PLANNING_API}`}>
+            {connected ? '기획개발 AI 켜짐' : '기획개발 AI 꺼짐'}
+          </Chip>
+          <ToastOutlet />
+        </div>
+      </header>
       <div className="pl-bar">
         <nav className="pl-menu" aria-label="기획개발 메뉴">
           {menu.map((m) => (
@@ -134,12 +146,6 @@ function Planning() {
             </a>
           ))}
         </nav>
-        <div className="pl-tools">
-          <Chip tone={connected ? 'green' : 'amber'} title={`기획개발 서버 ${PLANNING_API}`}>
-            {connected ? '기획개발 서버 연결됨' : '기획개발 서버 연결 안 됨'}
-          </Chip>
-          <ToastOutlet />
-        </div>
       </div>
 
       {planning ? (
