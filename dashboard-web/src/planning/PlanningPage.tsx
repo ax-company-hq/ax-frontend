@@ -4,11 +4,10 @@
 import '@dejafix/common-frontend/styles.css'
 import './planning.css'
 import { useEffect, useRef, useState } from 'react'
-import { Button, Chip, ToastOutlet, ToastProvider, type NavItem } from '@dejafix/common-frontend'
-import { useSharedStore } from './store'
-import { DeptSimulator } from './depts'
+import { Chip, ToastOutlet, ToastProvider, useToast, type NavItem } from '@dejafix/common-frontend'
+import { ACTION_ERROR_EVENT, useSharedStore } from './store'
+import { PLANNING_API } from './api'
 import { Dep, Point } from './parts'
-import { AssistantBody, AssistantComposer, useAssistantChat } from './assistant'
 import { Activity, Aftercare, Audit, Autonomy, Links, Metrics, Ops, Reviews, Specs, Work } from './pages'
 import { Requests, incomingCount } from './requests'
 import { Docs } from './docs'
@@ -80,8 +79,12 @@ export default function PlanningPage() {
 function Planning() {
   const route = useRoute()
   const [state, dispatch, connected] = useSharedStore()
-  const [panel, setPanel] = useState(false)
-  const chat = useAssistantChat(state, dispatch)
+  const toast = useToast()
+  useEffect(() => {
+    const on = (e: Event) => toast.show((e as CustomEvent<string>).detail)
+    window.addEventListener(ACTION_ERROR_EVENT, on)
+    return () => window.removeEventListener(ACTION_ERROR_EVENT, on)
+  }, [toast])
   const [section, sub, ...rest] = route.split('/')
   const planning = isSection(section)
   const tabs: { id: string; label: string }[] = planning ? SECTIONS[section].tabs : []
@@ -90,7 +93,7 @@ function Planning() {
   const [item, item2] = (tabs.length ? rest : [sub, ...rest]).map((x) => (x ? decodeURIComponent(x) : undefined))
   // 없는 화면 주소(예: 예전 '참여한 사건')는 들어온 요청으로 돌린다
   useEffect(() => {
-    if (!planning && section !== 'depts') location.replace('#/requests')
+    if (!planning) location.replace('#/requests')
   }, [planning, section])
 
   // 다른 부서에서 들어온 것: 기획개발 화면(요청·작업)을 볼 때까지 "새로"로 센다
@@ -108,7 +111,6 @@ function Planning() {
   const newWork = inbound.filter((x) => x.point !== 'message' && (x.seq ?? 0) > seenSeq).length
   const newTalk = inbound.filter((x) => x.point === 'message' && (x.seq ?? 0) > talkSeen).length
   const incoming = incomingCount(state)
-  const unreadOut = state.outbox.filter((m) => !m.read).length
   const recentIn = inbound.filter((x) => x.point !== 'message').slice(-3).reverse()
 
   const badge: Partial<Record<SectionId, number>> = { requests: newWork || incoming, talk: newTalk }
@@ -119,11 +121,10 @@ function Planning() {
       on: section === id,
       badge: badge[id] || 0,
     })),
-    { href: '#/depts', label: '다른 부서 (시뮬레이터)', on: section === 'depts', badge: unreadOut },
   ]
 
   return (
-    <div className={`main ${panel ? 'panel-open' : ''}`}>
+    <div className="main">
       <div className="pl-bar">
         <nav className="pl-menu" aria-label="기획개발 메뉴">
           {menu.map((m) => (
@@ -134,19 +135,14 @@ function Planning() {
           ))}
         </nav>
         <div className="pl-tools">
-          <Chip tone={connected ? 'green' : 'amber'} title={connected ? '시연용 목 데이터(PLANNING_MOCK=1). 연동 버스(127.0.0.1:8790)에 연결되어 기획개발 화면과 다른 부서 시뮬레이터가 같은 데이터를 봅니다.' : '시연용 목 데이터(PLANNING_MOCK=1). 연동 버스에 연결되지 않아 이 화면 혼자 동작합니다.'}>
-            {connected ? '시연 데이터 · 연동 중' : '시연 데이터 · 단독'}
+          <Chip tone={connected ? 'green' : 'amber'} title={`기획개발 서버 ${PLANNING_API}`}>
+            {connected ? '기획개발 서버 연결됨' : '기획개발 서버 연결 안 됨'}
           </Chip>
           <ToastOutlet />
-          <Button variant="dark" icon="sparkle" onClick={() => setPanel((v) => !v)}>
-            AI 어시스턴트
-          </Button>
         </div>
       </div>
 
-      {section === 'depts' ? (
-        <DeptSimulator s={state} d={dispatch} />
-      ) : planning ? (
+      {planning ? (
         <main className="page page-wide">
           {tabs.length > 0 && (
             <div className="subtabs" role="tablist" aria-label={`${SECTIONS[section].label} 메뉴`}>
@@ -189,17 +185,6 @@ function Planning() {
         </main>
       ) : null}
 
-      <aside className={`assistant ${panel ? 'open' : ''}`} aria-label="AI 어시스턴트" aria-hidden={!panel}>
-        <div className="assistant-head">
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div className="assistant-title">AI 어시스턴트</div>
-            <div className="assistant-sub">조회 + 문서 정리 · 확정·머지는 조건·교차검증으로 자동, 되돌릴 수 없는 일만 사람 (시연용 목 응답)</div>
-          </div>
-          <button type="button" className="btn small" onClick={() => setPanel(false)} aria-label="닫기">닫기</button>
-        </div>
-        <div className="assistant-body"><AssistantBody chat={chat} /></div>
-        <div className="assistant-foot"><AssistantComposer chat={chat} onClose={() => setPanel(false)} /></div>
-      </aside>
     </div>
   )
 }

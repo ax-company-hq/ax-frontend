@@ -18,10 +18,10 @@
 | `/hr` | 인사 AI: 업무 기록(사람이 확인할 후보 결정, 계획 비교, 인사 AI가 한 일), 인수인계(진행 상황·완성도, 인계자 질문에 답하기), 담당 명부(영역별 담당·교대, 담당 공백). 인수인계 시작·확정은 총괄 AI가 부르므로 버튼이 없다 |
 | `/marketing` | 마케팅 AI(시연용 가상 데이터, API 호출 없음): 게시 중 공지·공지 초안·공지 번호로 보기(사실 필드만, 원인 없음), 쿠폰 발급 기록(총액=건수×단가, 기준 이상·금액 불일치는 C 보류), 캠페인·SNS(Instagram)는 예정 기능과 정책 요약, 지표, 마케팅 AI가 한 일. 게시·발급은 총괄·고객지원 AI가 부르므로 실행 버튼이 없다 |
 | `/finance/guide` | 재무 AI 관리자 사용법 (5개 모듈 설명, 보류 큐에서 결정하는 법, 자주 묻는 질문) |
-| `/planning` | 기획개발 AI(캣북스 기획개발팀): 프로젝트·요청·작업·정리·소통·규정·자료·지표, 다른 부서 시뮬레이터. 화면 안 이동은 해시(`/planning#/requests`). 코드는 `src/planning/`(planning-web에서 옮김), 공통 컴포넌트 스타일은 `postcss.config.js`가 `.planning-scope` 안으로만 묶는다. 시연 데이터는 연동 버스(`VITE_BUS_URL`, 기본 127.0.0.1:8790, `npm run bus:planning`) |
+| `/planning` | 기획개발 AI(캣북스 기획개발팀): 프로젝트·요청·작업·정리·소통·규정·자료·지표. 다른 부서 시뮬레이터는 넣지 않았다(개발 도구는 planning-web 3003). 화면 안 이동은 해시(`/planning#/requests`). 코드는 `src/planning/`(planning-web에서 옮김), 공통 컴포넌트 스타일은 `postcss.config.js`가 `.planning-scope` 안으로만 묶는다. 데이터는 기획개발 백엔드(`VITE_PLANNING_API_URL`, 기본 http://localhost:8101)의 `GET /api/planning/events`(SSE)·`/review-queue`로 받고, 버튼은 `POST /api/planning/actions`로 보낸다. 목 데이터·연동 버스·AI 어시스턴트(목 응답)는 쓰지 않는다. 백엔드가 꺼져 있으면 빈 화면에 '기획개발 서버 연결 안 됨' |
 
 상단 '쇼핑몰 보기'는 루트 `.env`의 `VITE_SHOP_WEB_URL`(기본 `http://localhost:3000`)을 연다.
-'기획개발 ↗'은 `VITE_PLANNING_WEB_URL`(기본 `http://localhost:3002`, 게이트웨이에서는 `/admin/planning/`)을 연다. 앱 사이 링크는 일반 `<a>`다 (`lib/nav.tsx`의 `Link`는 http(s)가 아니면 라우터 경로로 처리해 `/admin` 아래에서 깨진다).
+기획개발은 링크가 아니라 사이드바 「기획개발 AI」 탭(`/planning`)이다. 앱 사이 링크는 일반 `<a>`다 (`lib/nav.tsx`의 `Link`는 http(s)가 아니면 라우터 경로로 처리해 `/admin` 아래에서 깨진다).
 
 게이트웨이(한 포트)에서는 `DASHBOARD_WEB_BASE=/admin/`으로 빌드한다 (기본 `/`). 라우터 `basename`은 `import.meta.env.BASE_URL`에서 계산한다. `VITE_ADMIN_LOGIN=on`이면 화면 앞에 데모 비밀번호(`VITE_ADMIN_DEMO_PASSWORD`, 기본 `catbooks`)가 선다. 실제 인증이 아니고 비밀번호가 번들에 들어간다. 쓰기 요청(GET 외)에는 `VITE_SAFETY_HUMAN_TOKEN`을 `Authorization: Bearer`로 보낸다 (ax-backend #295).
 

@@ -57,7 +57,10 @@ export function Talk({ s: state, d, item }: { s: State; d: Dispatch<Action>; ite
           ))}
         </div>
       </aside>
-      {convo ? <ConvoView s={s} c={convo} /> : <ThreadView s={s} d={d} th={s.threads.find((t) => t.id === item) ?? s.threads.find((t) => t.id === 'CH-team') ?? s.threads[0]} />}
+      {convo ? <ConvoView s={s} c={convo} /> : (() => {
+        const th = s.threads.find((t) => t.id === item) ?? s.threads.find((t) => t.id === 'CH-team') ?? s.threads[0]
+        return th ? <ThreadView key={th.id} s={s} d={d} th={th} /> : <div className="empty"><b>대화 없음</b></div>
+      })()}
     </div>
   )
 }
@@ -130,7 +133,6 @@ function ThreadView({ s, d, th }: { s: State; d: Dispatch<Action>; th: Thread })
           {th.on === 'SPEC-7' && spec?.question && (
             <div className="question" style={{ margin: '8px 20px' }}>
               질문 · {spec.question}
-              <button type="button" className="linkish" onClick={() => d({ type: 'answerQuestion', spec: 'SPEC-7', text: '재고가 없어진 상품은 남기되 품절로 표시해 주세요.' })}>시연: 고객지원이 답함</button>
             </div>
           )}
           <div ref={end} />

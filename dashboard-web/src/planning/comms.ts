@@ -1,8 +1,7 @@
-// 실제 모드(VITE_PLANNING_MOCK=0)에서 소통 › 에이전트 대화의 원천: dashboard-api 공통 로그 조회
-// `GET /api/dashboard/communications?dept=planning` (#248·#277·#278). 목 모드에서는 쓰지 않고 연동 버스 활동을 그대로 본다.
+// 소통 › 에이전트 대화의 원천: dashboard-api 공통 로그 조회
+// `GET /api/dashboard/communications?dept=planning` (#248·#277·#278).
 import { useEffect, useState } from 'react'
 import type { Activity, Dept } from './data'
-import { MOCK } from './store'
 
 const API = (import.meta.env.VITE_DASHBOARD_API_URL as string | undefined) ?? 'http://localhost:8020'
 const POLL_MS = 5000
@@ -36,11 +35,10 @@ export function toActivity(l: Line): Activity {
   }
 }
 
-// 실제 모드면 공통 로그 줄을, 목 모드면 null(연동 버스 활동을 쓴다)을 돌려준다
+// 공통 로그 줄을 돌려준다 (연결 전에는 빈 목록)
 export function useCommunications(dept: Dept = 'planning'): Activity[] | null {
   const [lines, setLines] = useState<Activity[]>([])
   useEffect(() => {
-    if (MOCK) return
     let alive = true
     const load = () =>
       fetch(`${API}/api/dashboard/communications?dept=${dept}`)
@@ -51,5 +49,5 @@ export function useCommunications(dept: Dept = 'planning'): Activity[] | null {
     const i = setInterval(load, POLL_MS)
     return () => { alive = false; clearInterval(i) }
   }, [dept])
-  return MOCK ? null : lines
+  return lines
 }
