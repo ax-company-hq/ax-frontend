@@ -163,7 +163,7 @@ export default function AgentOffice() {
       )}
 
       <div className="flex min-h-0 flex-1 flex-col gap-4 xl:flex-row">
-        <section aria-label="부서 AI 사무실" className="card flex shrink-0 flex-col gap-3 p-4 xl:w-[min(62%,820px)]">
+        <section aria-label="부서 AI 사무실" className="card flex min-w-0 shrink-0 flex-col gap-3 p-4 xl:flex-1">
           <div className="flex items-center gap-2">
             <h2 className="card-title">부서 AI 사무실</h2>
             <span className="text-xs text-ink-500">8자리 · 총괄 포함</span>

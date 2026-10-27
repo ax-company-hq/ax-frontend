@@ -1,20 +1,52 @@
 import { useEffect, useRef } from "react";
 import { DESKS, type Bubble, type DeskKey, type OfficeView } from "@/lib/office";
 
-// 픽셀 사무실 캔버스. 그림은 논리 픽셀(256×176)로 그리고 3배로 키운다. 글자(이름표·말풍선)는 키우지 않은 좌표에 선명하게 그린다.
-// 픽셀 그림의 색은 캔버스 전용 팔레트다 (화면 UI는 디자인 토큰을 쓴다).
+// 픽셀 사무실 캔버스: "Startup Cowork" 장면 (벽돌 벽·커피 바·빈백 라운지).
+// 배경과 캐릭터 스프라이트는 Sebaspelusa/pixel-office(MIT)와 pablodelucca/pixel-agents(MIT)에서 가져왔다
+// (public/office/CREDITS.md). 배경은 원본(2912×1440)에서 체크무늬 테두리를 잘라낸 방 안쪽만 쓴다.
+// 그림 색은 이미지·캔버스 전용이다 (화면 UI는 디자인 토큰을 쓴다).
 
-const S = 3, W = 256, H = 176;
+const W = 1280, H = 591; // 캔버스 픽셀 = 잘라낸 배경 비율(2650×1224)
+const BASE = import.meta.env.BASE_URL;
+const BG_SRC = `${BASE}office/startup-cowork.jpg`;
 const FONT = '"Pretendard Variable", Pretendard, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif';
+
+/** 원본 이미지 비율 좌표 → 캔버스 좌표 (잘라낸 영역: x 0.045~0.955, y 0.085~0.935) */
+const toC = (fx: number, fy: number) => ({ x: ((fx - 0.045) / 0.91) * W, y: ((fy - 0.085) / 0.85) * H });
+
+/** 자리(원본 이미지 비율, 의자 위 발끝)와 스프라이트. 그림이 6벌이라 멀리 앉은 두 쌍은 같은 그림을 쓴다 */
+const SEATS: Record<DeskKey, { fx: number; fy: number; char: number }> = {
+  infra: { fx: 0.151, fy: 0.392, char: 0 },
+  data: { fx: 0.282, fy: 0.392, char: 2 },
+  support: { fx: 0.366, fy: 0.392, char: 4 },
+  finance: { fx: 0.496, fy: 0.392, char: 1 },
+  planning: { fx: 0.189, fy: 0.585, char: 5 },
+  marketing: { fx: 0.302, fy: 0.585, char: 1 },
+  hr: { fx: 0.411, fy: 0.585, char: 0 },
+  orchestrator: { fx: 0.591, fy: 0.676, char: 3 },
+};
+const SEAT_PX = Object.fromEntries(DESKS.map((d) => [d.key, toC(SEATS[d.key].fx, SEATS[d.key].fy)])) as Record<DeskKey, Pt>;
 const DESK_BY = Object.fromEntries(DESKS.map((d) => [d.key, d])) as Record<DeskKey, (typeof DESKS)[number]>;
-const ORCH = DESK_BY.orchestrator;
-const HOME = { x: ORCH.x + 13, y: ORCH.y - 12 };
-/** 두 줄 책상 사이 복도(러그) */
-const AISLE_Y = 96;
-const SPEED = 70; // 논리 px/초
+
+/** 위 책상 섬과 아래 책상 사이 통로. 총괄은 이 줄을 따라 걷고, 맡긴 부서 바로 앞(통로)에 선다 */
+const AISLE_Y = toC(0, 0.52).y;
+const HOME = SEAT_PX.orchestrator;
+const SPEED = 220; // 캔버스 px/초
+
+// 스프라이트 시트: 16×32 칸 7열 × 3줄 (줄 0 앞, 1 뒤, 2 옆). 열 0~2 걷기, 3~4 타이핑, 5~6 읽기
+const FW = 16, FH = 32, SC = 2.5;
+const SW = FW * SC, SH = FH * SC;
 
 type Pt = { x: number; y: number };
-const standOf = (k: DeskKey): Pt => ({ x: DESK_BY[k].x - 11, y: DESK_BY[k].y - 16 });
+type Pose = { row: number; col: number; flip: boolean };
+
+const standOf = (k: DeskKey): Pt => ({ x: SEAT_PX[k].x + (k === "orchestrator" ? 0 : 44), y: AISLE_Y });
+
+function loadImage(src: string): HTMLImageElement {
+  const img = new Image();
+  img.src = src;
+  return img;
+}
 
 export function PixelOffice({ view, label }: { view: OfficeView; label: string }) {
   const ref = useRef<HTMLCanvasElement>(null);
@@ -25,11 +57,14 @@ export function PixelOffice({ view, label }: { view: OfficeView; label: string }
     const cv = ref.current;
     const ctx = cv?.getContext("2d");
     if (!cv || !ctx) return;
+    const bg = loadImage(BG_SRC);
+    const sprites = Array.from({ length: 6 }, (_, i) => loadImage(`${BASE}office/char_${i}.png`));
     const pos: Pt = { ...HOME };
     let route: Pt[] = [];
     let target: DeskKey | null = null;
     let last = performance.now();
     let raf = 0;
+    let dir: Pt = { x: 0, y: 0 };
 
     const plan = (to: DeskKey | null) => {
       const dest = to ? standOf(to) : HOME;
@@ -46,11 +81,12 @@ export function PixelOffice({ view, label }: { view: OfficeView; label: string }
       while (route.length && budget > 0) {
         const p = route[0];
         const dx = p.x - pos.x, dy = p.y - pos.y, d = Math.hypot(dx, dy);
+        if (d > 0) dir = { x: dx / d, y: dy / d };
         if (d <= budget) { pos.x = p.x; pos.y = p.y; budget -= d; route.shift(); }
         else { pos.x += (dx / d) * budget; pos.y += (dy / d) * budget; budget = 0; moving = true; }
       }
       const seated = !route.length && target === null && pos.x === HOME.x && pos.y === HOME.y;
-      draw(ctx, v, now / 1000, pos, seated ? "sit" : moving ? "walk" : "stand");
+      draw(ctx, { bg, sprites }, v, now / 1000, pos, seated ? "sit" : moving ? "walk" : "stand", dir);
       raf = requestAnimationFrame(frame);
     };
     raf = requestAnimationFrame(frame);
@@ -58,164 +94,156 @@ export function PixelOffice({ view, label }: { view: OfficeView; label: string }
   }, []);
 
   return (
-    <canvas ref={ref} width={W * S} height={H * S} role="img" aria-label={label}
+    <canvas ref={ref} width={W} height={H} role="img" aria-label={label}
       className="block h-auto w-full rounded-2xl [image-rendering:pixelated]" />
   );
 }
 
 // ---------------------------------------------------------------- 그리기
 type Mode = "sit" | "walk" | "stand";
+type Art = { bg: HTMLImageElement; sprites: HTMLImageElement[] };
+const ready = (img: HTMLImageElement) => img.complete && img.naturalWidth > 0;
 
-function draw(ctx: CanvasRenderingContext2D, v: OfficeView, t: number, orch: Pt, orchMode: Mode) {
-  ctx.setTransform(S, 0, 0, S, 0, 0);
-  ctx.imageSmoothingEnabled = false;
-  const R = (x: number, y: number, w: number, h: number, c: string) => { ctx.fillStyle = c; ctx.fillRect(Math.round(x), Math.round(y), w, h); };
-
-  drawRoom(R, v);
-  for (const row of [DESKS.slice(0, 4), DESKS.slice(4)]) {
-    for (const d of row) {
-      R(d.x + 11, d.y - 9, 14, 10, "#30354d"); R(d.x + 12, d.y - 8, 12, 8, "#3d4361");
-      if (d.key === "orchestrator" && orchMode !== "sit") continue;
-      drawChar(R, d.key, d.x + 13, d.y - 12, t, "sit", v.desks[d.key].state);
-    }
-    for (const d of row) drawDesk(R, d.key, t, v);
-  }
-  if (orchMode !== "sit") drawChar(R, "orchestrator", orch.x, orch.y, t, orchMode, v.desks.orchestrator.state);
-
-  // 선명한 글자 층
+function draw(ctx: CanvasRenderingContext2D, art: Art, v: OfficeView, t: number, orch: Pt, orchMode: Mode, dir: Pt) {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
-  for (const d of DESKS) nameTag(ctx, d.key);
-  tvText(ctx, v);
-  for (const d of DESKS) {
+  ctx.imageSmoothingEnabled = false;
+  if (ready(art.bg)) ctx.drawImage(art.bg, 0, 0, W, H);
+  else { ctx.fillStyle = "#b8743a"; ctx.fillRect(0, 0, W, H); }
+  // 조명 아래 따뜻한 빛
+  ctx.fillStyle = "rgba(255,200,120,.05)"; ctx.fillRect(0, 0, W, H);
+
+  // 사람: 발끝 y 순서로 그려 앞사람이 위에 오게 한다
+  const people = DESKS.map((d) => {
+    const away = d.key === "orchestrator" && orchMode !== "sit";
+    const p = away ? orch : SEAT_PX[d.key];
+    return { key: d.key, p, mode: away ? orchMode : ("sit" as Mode) };
+  }).sort((a, b) => a.p.y - b.p.y);
+
+  for (const { key, p, mode } of people) {
+    const st = v.desks[key].state;
+    statusGlow(ctx, p, st, t);
+    const seat = SEATS[key];
+    const sheet = art.sprites[seat.char];
+    if (ready(sheet)) sprite(ctx, sheet, p, poseOf(mode, st, t, DESKS.findIndex((d) => d.key === key), dir));
+    if (key === "orchestrator") crown(ctx, p);
+  }
+
+  boardCard(ctx, v);
+  for (const { key, p } of people) nameTag(ctx, key, p);
+
+  // 말풍선: 위 줄은 머리 위(한 자리 걸러 한 칸 더 위), 아래 줄 책상 사람은 위 줄 이름표를 가리지 않게 이름표 아래로
+  DESKS.forEach((d, i) => {
     const dv = v.desks[d.key];
     const away = d.key === "orchestrator" && orchMode !== "sit";
-    const cx = away ? (orch.x + 5) * S : (d.x + 18) * S;
-    // 총괄이 다른 부서 옆에 서 있으면 그 부서 말풍선과 겹치지 않게 한 칸 위로 띄운다
+    const p = away ? orch : SEAT_PX[d.key];
+    const b: Bubble | null = dv.state === "waiting" ? { text: "! 승인 대기", kind: "warn" } : dv.bubble;
+    if (!b) return;
+    const back = SEATS[d.key].fy < 0.5;
+    if (!back && !away) { bubble(ctx, p.x, p.y + 32, b, t, dv.state === "waiting", "down"); return; }
     const crowded = away && v.walkTo !== null && (v.desks[v.walkTo].state === "waiting" || v.desks[v.walkTo].bubble !== null);
-    const top = away ? orch.y * S - (crowded ? 36 : 0) : (d.y - 12) * S;
-    if (dv.state === "waiting") bubble(ctx, cx, top, { text: "! 승인 대기", kind: "warn" }, t, true);
-    else if (dv.bubble) bubble(ctx, cx, top, dv.bubble, t, false);
-  }
+    const lift = (back && i % 2 === 1 ? 44 : 0) + (crowded ? 48 : 0);
+    bubble(ctx, p.x, p.y - SH - 6 - lift, b, t, dv.state === "waiting", "up");
+  });
 }
 
-type Rect = (x: number, y: number, w: number, h: number, c: string) => void;
-
-function drawRoom(R: Rect, v: OfficeView) {
-  // 벽
-  R(0, 0, W, 30, "#3d4263"); R(0, 0, W, 3, "#4c5276"); R(0, 27, W, 3, "#2a2e47");
-  for (const wx of [44, 100, 150]) { R(wx, 6, 30, 16, "#262a41"); R(wx + 1, 7, 28, 14, "#8fc7e8"); R(wx + 1, 7, 28, 5, "#b7dcf2"); R(wx + 14, 7, 2, 14, "#262a41"); R(wx + 1, 13, 28, 1, "#262a41"); }
-  // 캣북스 책장
-  R(4, 4, 30, 24, "#5b3a22"); R(5, 5, 28, 22, "#3e2716");
-  const bc = ["#e76f51", "#2a9d8f", "#e9c46a", "#8e6cf0", "#f4a261", "#3a86ff", "#ff6b9a"];
-  for (let r = 0; r < 2; r++) for (let i = 0; i < 7; i++) { const h = 8 - ((i * 3 + r) % 3); R(6 + i * 4, 6 + r * 11 + (9 - h), 3, h, bc[(i + r * 2) % 7]); }
-  R(5, 15, 28, 1, "#5b3a22");
-  // 벽 화면: 사건 진행
-  R(192, 3, 56, 25, "#15172a"); R(194, 5, 52, 21, "#0d1b2a");
-  const { done, total } = v.progress;
-  if (total > 0) {
-    const w = Math.round((done / total) * 46);
-    R(197, 20, 46, 3, "#24324a");
-    R(197, 20, w, 3, v.status === "alert" ? "#ffb020" : v.status === "degraded" ? "#ff8a3d" : "#3ddc84");
+function poseOf(mode: Mode, state: string, t: number, seed: number, dir: Pt): Pose {
+  if (mode === "walk") {
+    const col = [0, 1, 2, 1][Math.floor(t * 8) % 4];
+    if (Math.abs(dir.y) > Math.abs(dir.x)) return { row: dir.y < 0 ? 1 : 0, col, flip: false };
+    return { row: 2, col, flip: dir.x < 0 };
   }
-  // 바닥
-  for (let y = 30; y < H; y += 12) for (let x = 0; x < W + 24; x += 24) {
-    const off = ((y / 12) % 2) * 12;
-    R(x - off, y, 24, 12, ((x + y) / 12) % 2 ? "#d9c39e" : "#d2bb94"); R(x - off, y + 11, 24, 1, "#c4ab82"); R(x - off + 23, y, 1, 11, "#c9b087");
-  }
-  // 복도 러그
-  R(2, 91, 252, 24, "#7d8bb5"); R(4, 93, 248, 20, "#8e9cc6"); for (let i = 0; i < 248; i += 8) R(4 + i, 93, 4, 1, "#a8b4d8");
-  // 화분
-  for (const [px, py] of [[240, 150], [4, 152], [240, 40]]) {
-    R(px, py + 10, 10, 8, "#9c5b34"); R(px + 1, py + 10, 8, 2, "#b06c40"); R(px + 2, py, 6, 10, "#3f8f4f"); R(px, py + 3, 4, 6, "#4fa85f"); R(px + 6, py + 2, 4, 6, "#4fa85f"); R(px + 3, py - 2, 4, 4, "#5fbf6f");
-  }
+  if (mode === "stand") return { row: 0, col: 1, flip: false };
+  if (state === "working") return { row: 0, col: 3 + (Math.floor(t * 8 + seed) % 2), flip: false };
+  if (state === "waiting") return { row: 0, col: 5 + (Math.floor(t * 2) % 2), flip: false };
+  // 쉬는 중: 가끔 고개를 돌린다
+  return { row: Math.floor(t / 3.1 + seed) % 5 === 0 ? 2 : 0, col: 1, flip: seed % 2 === 1 };
 }
 
-function shade(hex: string, p: number) {
-  const n = parseInt(hex.slice(1), 16);
-  const f = (c: number) => Math.max(0, Math.min(255, Math.round(c + (p < 0 ? c * p : (255 - c) * p))));
-  return `rgb(${f(n >> 16)},${f((n >> 8) & 255)},${f(n & 255)})`;
+function sprite(ctx: CanvasRenderingContext2D, sheet: HTMLImageElement, p: Pt, pose: Pose) {
+  const fw = sheet.naturalWidth / 7, fh = sheet.naturalHeight / 3;
+  ctx.save();
+  ctx.translate(Math.round(p.x), Math.round(p.y));
+  if (pose.flip) ctx.scale(-1, 1);
+  ctx.drawImage(sheet, pose.col * fw, pose.row * fh, fw, fh, -SW / 2, -SH, SW, SH);
+  ctx.restore();
 }
 
-function drawChar(R: Rect, key: DeskKey, x: number, y: number, t: number, mode: Mode, state: string) {
-  const d = DESK_BY[key];
-  const seed = DESKS.indexOf(d) + 1;
-  const typing = mode === "sit" && state === "working";
-  R(x + 1, y, 8, 3, d.hair); R(x + 1, y + 3, 1, 2, d.hair); R(x + 8, y + 3, 1, 2, d.hair);
-  R(x + 2, y + 2, 6, 5, d.skin); R(x + 1, y + 2, 8, 1, d.hair);
-  if (key === "orchestrator") { R(x + 2, y - 1, 6, 1, "#ffb020"); R(x + 2, y - 2, 1, 1, "#ffb020"); R(x + 4, y - 2, 2, 1, "#ffb020"); R(x + 7, y - 2, 1, 1, "#ffb020"); }
-  const blink = (t * 1000 + seed * 997) % 3600 < 130;
-  const look = mode === "sit" && Math.floor(t / 2.7 + seed) % 4 === 0 ? 1 : 0;
-  if (!blink) { R(x + 3 + look, y + 4, 1, 1, "#222"); R(x + 6 + look, y + 4, 1, 1, "#222"); }
-  if (state === "waiting") R(x + 4, y + 6, 2, 1, "#b23a48");
-  R(x + 1, y + 7, 8, 5, d.shirt); R(x + 4, y + 7, 2, 1, d.skin);
-  const dark = shade(d.shirt, -0.25);
-  R(x, y + 8, 1, 3, dark); R(x + 9, y + 8, 1, 3, dark);
-  if (typing) { const ph = Math.floor(t * 9 + seed) % 2; R(x + 1, y + 11 - ph, 2, 1, d.skin); R(x + 7, y + 10 + ph, 2, 1, d.skin); }
-  else if (mode === "sit") { R(x + 1, y + 11, 2, 1, d.skin); R(x + 7, y + 11, 2, 1, d.skin); }
-  else { R(x, y + 11, 1, 1, d.skin); R(x + 9, y + 11, 1, 1, d.skin); }
-  if (mode !== "sit") {
-    const ph = mode === "walk" ? Math.floor(t * 8) % 2 : 0;
-    R(x + 2, y + 12, 2, 2 + (ph ? 0 : 1), "#2b2f45"); R(x + 6, y + 12, 2, 2 + (ph ? 1 : 0), "#2b2f45");
-  }
+function statusGlow(ctx: CanvasRenderingContext2D, p: Pt, state: string, t: number) {
+  const color = state === "working" ? "rgba(61,220,132,.55)" : state === "waiting" ? (Math.floor(t * 3) % 2 ? "rgba(255,176,32,.75)" : "rgba(255,176,32,.35)") : "rgba(40,20,10,.28)";
+  ctx.fillStyle = color;
+  ctx.beginPath(); ctx.ellipse(p.x, p.y - 2, SW * 0.55, 7, 0, 0, Math.PI * 2); ctx.fill();
 }
 
-function drawDesk(R: Rect, key: DeskKey, t: number, v: OfficeView) {
-  const d = DESK_BY[key], s = v.desks[key].state, seed = DESKS.indexOf(d) + 1;
-  const { x, y } = d;
-  R(x + 2, y - 10, 13, 9, "#20232f");
-  const scr = s === "working" ? "#183a2d" : s === "waiting" ? (Math.floor(t * 3) % 2 ? "#5a1d26" : "#3a1820") : "#2e3b55";
-  R(x + 3, y - 9, 11, 6, scr);
-  if (s === "working") for (let i = 0; i < 3; i++) R(x + 4, y - 8 + i * 2, Math.min(9, 3 + ((Math.floor(t * 6) + i * 5 + seed) % 6)), 1, "#3ddc84");
-  else if (s === "idle") R(x + 6, y - 7, 5, 2, "#45577d");
-  R(x + 7, y - 2, 3, 2, "#20232f");
-  const top = key === "orchestrator" ? "#5b4fd0" : "#a7703f";
-  R(x, y, 36, 4, top); R(x, y, 36, 1, shade(top, 0.2)); R(x, y + 4, 36, 9, shade(top, -0.3)); R(x + 2, y + 13, 3, 3, "#5c3a1d"); R(x + 31, y + 13, 3, 3, "#5c3a1d");
-  R(x + 29, y - 3, 4, 3, "#f1f1f1"); R(x + 33, y - 2, 1, 2, "#f1f1f1"); R(x + 21, y - 1, 6, 1, "#f5f0e1");
+function crown(ctx: CanvasRenderingContext2D, p: Pt) {
+  const x = Math.round(p.x - 10), y = Math.round(p.y - SH - 6);
+  ctx.fillStyle = "#7a4a00"; ctx.fillRect(x - 2, y + 4, 24, 8);
+  ctx.fillStyle = "#ffcf3a"; ctx.fillRect(x, y + 6, 20, 5);
+  ctx.fillRect(x, y, 4, 6); ctx.fillRect(x + 8, y - 2, 4, 8); ctx.fillRect(x + 16, y, 4, 6);
+  ctx.fillStyle = "#e11d48"; ctx.fillRect(x + 9, y + 7, 2, 2);
 }
 
 function rr(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
   ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
 }
 
-function nameTag(ctx: CanvasRenderingContext2D, key: DeskKey) {
+function nameTag(ctx: CanvasRenderingContext2D, key: DeskKey, p: Pt) {
   const d = DESK_BY[key];
-  const cx = (d.x + 18) * S, cy = (d.y + 19) * S;
-  ctx.font = `700 12px ${FONT}`;
-  const w = ctx.measureText(d.label).width + 28;
-  ctx.fillStyle = "rgba(22,25,40,.8)"; rr(ctx, cx - w / 2, cy - 10, w, 20, 10); ctx.fill();
-  ctx.fillStyle = d.shirt; ctx.beginPath(); ctx.arc(cx - w / 2 + 11, cy, 4, 0, 7); ctx.fill();
-  ctx.fillStyle = "#fff"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(d.label, cx + 6, cy + 0.5);
+  const cx = p.x, cy = p.y + 16;
+  ctx.font = `700 17px ${FONT}`;
+  const w = ctx.measureText(d.label).width + 36;
+  ctx.fillStyle = "rgba(34,20,12,.84)"; rr(ctx, cx - w / 2, cy - 13, w, 26, 13); ctx.fill();
+  ctx.fillStyle = d.shirt; ctx.beginPath(); ctx.arc(cx - w / 2 + 14, cy, 5, 0, 7); ctx.fill();
+  ctx.fillStyle = "#fff"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(d.label, cx + 8, cy + 1);
 }
 
-function tvText(ctx: CanvasRenderingContext2D, v: OfficeView) {
+/** 벽의 스프린트 보드 자리에 사건 진행 카드를 붙인다 */
+function boardCard(ctx: CanvasRenderingContext2D, v: OfficeView) {
+  const a = toC(0.765, 0.135), b = toC(0.9, 0.28);
+  const x = a.x, y = a.y, w = b.x - a.x, h = b.y - a.y;
   const { done, total } = v.progress;
-  ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
-  ctx.font = `600 11px ${FONT}`; ctx.fillStyle = "#8da2c0";
-  ctx.fillText(total ? "사건 진행" : "총괄 사건", 197 * S, 11 * S);
-  ctx.font = `800 14px ${FONT}`; ctx.textAlign = "right";
+  ctx.fillStyle = "rgba(255,255,252,.94)"; rr(ctx, x, y, w, h, 6); ctx.fill();
+  ctx.strokeStyle = "#8e959e"; ctx.lineWidth = 2; ctx.stroke();
+  ctx.textBaseline = "alphabetic"; ctx.textAlign = "left";
+  ctx.font = `600 15px ${FONT}`; ctx.fillStyle = "#64748b";
+  ctx.fillText(total ? "사건 진행" : "총괄 사건", x + 12, y + 24);
+  ctx.font = `800 22px ${FONT}`; ctx.textAlign = "right";
   const txt = !v.incident ? "없음" : v.status === "alert" ? `${done}/${total}` : v.status === "degraded" ? "일부 미완료" : "해결";
-  ctx.fillStyle = v.status === "alert" ? "#ffb020" : v.status === "degraded" ? "#ff8a3d" : "#3ddc84";
-  ctx.fillText(txt, 244 * S, 11 * S + 2);
+  ctx.fillStyle = !v.incident ? "#475569" : v.status === "alert" ? "#d97706" : v.status === "degraded" ? "#ea580c" : "#16a34a";
+  ctx.fillText(txt, x + w - 12, y + 27);
   if (v.incident && v.status === "alert") {
-    ctx.font = `600 10px ${FONT}`; ctx.fillStyle = "#c9d3e2"; ctx.textAlign = "left";
-    ctx.fillText("결제 장애 대응", 197 * S, 17 * S + 2);
+    ctx.font = `600 14px ${FONT}`; ctx.fillStyle = "#334155"; ctx.textAlign = "left";
+    ctx.fillText("결제 장애 대응", x + 12, y + 50);
+  }
+  if (total > 0) {
+    const bw = w - 24;
+    ctx.fillStyle = "#e2e8f0"; ctx.fillRect(x + 12, y + h - 20, bw, 8);
+    ctx.fillStyle = v.status === "alert" ? "#f59e0b" : v.status === "degraded" ? "#ea580c" : "#16a34a";
+    ctx.fillRect(x + 12, y + h - 20, Math.round((done / total) * bw), 8);
   }
 }
 
-function bubble(ctx: CanvasRenderingContext2D, cx: number, top: number, b: Bubble, t: number, blink: boolean) {
-  ctx.font = `700 13px ${FONT}`;
+/** `up`: 꼬리가 아래(머리 위 말풍선, anchor = 꼬리 끝 아래 기준). `down`: 꼬리가 위(anchor = 말풍선 꼬리 끝) */
+function bubble(ctx: CanvasRenderingContext2D, cx: number, anchor: number, b: Bubble, t: number, blink: boolean, side: "up" | "down") {
+  ctx.font = `700 18px ${FONT}`;
   const think = b.kind === "think";
   const txt = think ? b.text + ".".repeat(1 + (Math.floor(t * 3) % 3)) : b.text;
-  const w = Math.ceil(ctx.measureText(think ? `${b.text}...` : txt).width) + 18, h = 26;
-  const x = Math.round(Math.max(6, Math.min(W * S - w - 6, cx - w / 2))), y = Math.round(top - h - 10);
+  const w = Math.ceil(ctx.measureText(think ? `${b.text}...` : txt).width) + 24, h = 34;
+  const x = Math.round(Math.max(6, Math.min(W - w - 6, cx - w / 2)));
+  const y = Math.round(side === "up" ? anchor - h - 12 : anchor + 12);
   const look: Record<string, [string, string, string]> = {
     say: ["#ffffff", "#1d2233", "#1d2233"], think: ["#eef1ff", "#2e2688", "#2e2688"], ok: ["#dcf7e6", "#065f46", "#065f46"],
     warn: [blink && Math.floor(t * 2.5) % 2 ? "#ffb020" : "#ffc95a", "#3b2600", "#6b4500"], alert: ["#ff4d5e", "#ffffff", "#7a1420"],
   };
   const [bg, fg, bd] = look[b.kind];
+  const ax = Math.round(cx);
   ctx.fillStyle = bd; ctx.fillRect(x - 3, y, w + 6, h); ctx.fillRect(x, y - 3, w, h + 6);
   ctx.fillStyle = bg; ctx.fillRect(x, y, w, h);
-  ctx.fillStyle = bd; ctx.fillRect(cx - 6, y + h, 12, 3); ctx.fillRect(cx - 3, y + h + 3, 6, 3); ctx.fillRect(cx, y + h + 6, 3, 3);
-  ctx.fillStyle = bg; ctx.fillRect(cx - 3, y + h, 6, 3); ctx.fillRect(cx, y + h + 3, 3, 1);
-  ctx.fillStyle = fg; ctx.textAlign = "left"; ctx.textBaseline = "middle"; ctx.fillText(txt, x + 9, y + h / 2 + 0.5);
+  if (side === "up") {
+    ctx.fillStyle = bd; ctx.fillRect(ax - 7, y + h, 14, 4); ctx.fillRect(ax - 4, y + h + 4, 8, 4); ctx.fillRect(ax - 1, y + h + 8, 3, 4);
+    ctx.fillStyle = bg; ctx.fillRect(ax - 4, y + h, 8, 4); ctx.fillRect(ax - 1, y + h + 4, 3, 1);
+  } else {
+    ctx.fillStyle = bd; ctx.fillRect(ax - 7, y - 4, 14, 4); ctx.fillRect(ax - 4, y - 8, 8, 4); ctx.fillRect(ax - 1, y - 12, 3, 4);
+    ctx.fillStyle = bg; ctx.fillRect(ax - 4, y - 4, 8, 4); ctx.fillRect(ax - 1, y - 5, 3, 1);
+  }
+  ctx.fillStyle = fg; ctx.textAlign = "left"; ctx.textBaseline = "middle"; ctx.fillText(txt, x + 12, y + h / 2 + 1);
 }

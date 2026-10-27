@@ -17,8 +17,8 @@ const NAV = [
   { href: "/marketing", label: "마케팅 AI", Icon: IconMegaphone },
   { href: "/planning", label: "기획개발 AI", Icon: IconPlan },
   { href: "/agents/chat", label: "AI 대화방", Icon: IconAgents },
-  { href: "/agents/office", label: "AI 오피스", Icon: IconOffice },
   { href: "/support", label: "고객지원 AI", Icon: IconUser },
+  { href: "/agents/office", label: "AI 오피스", Icon: IconOffice },
 ];
 
 const isActive = (path: string, href: string) => (href === "/" ? path === "/" : path.startsWith(href));

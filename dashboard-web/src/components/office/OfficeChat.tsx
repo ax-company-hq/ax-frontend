@@ -31,7 +31,7 @@ export function OfficeChat({ items, typing, freshIds, title, sub }: { items: Cha
   };
 
   return (
-    <section aria-label="부서 단톡방" className="card flex min-h-[420px] min-w-0 flex-1 flex-col overflow-hidden">
+    <section aria-label="부서 단톡방" className="card flex min-h-[420px] min-w-0 flex-1 flex-col overflow-hidden xl:w-[580px] xl:flex-none">
       <header className="flex items-center gap-2 border-b border-ink-100 px-4 py-3">
         <h2 className="card-title truncate">{title}</h2>
         <span className="truncate text-xs text-ink-500">{sub}</span>
