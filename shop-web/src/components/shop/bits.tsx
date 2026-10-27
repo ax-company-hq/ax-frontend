@@ -14,7 +14,7 @@ export function ProductCard({ p }: { p: Product }) {
   return (
     <Link href={`/products/${p.product_id}`} className="group flex w-full flex-col gap-2">
       <div className="relative rounded-md bg-surface-2 p-4 transition group-hover:bg-ink-100">
-        <Cover title={p.name} hue={hueOf(p.product_id)} category={p.category_code} className="mx-auto max-w-[170px]" />
+        <Cover title={p.name} hue={hueOf(p.product_id)} category={p.category_code} productId={p.product_id} className="mx-auto max-w-[170px]" />
         {soldOut && <span className="absolute left-2 top-2 chip bg-ink-900 text-surface">일시품절</span>}
       </div>
       <div className="min-w-0">
