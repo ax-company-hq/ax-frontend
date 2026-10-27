@@ -62,8 +62,8 @@ function shortDay(iso: string | null) {
 
 /** 감사 ✗ = 빨강, C 보류 = 주황. 둘 다 아니면 표시 없음 */
 function statusDot(i: IncidentSummary): { cls: string; label: string } | null {
-  if (i.checks_ok === false) return { cls: "bg-red-500", label: i.held_count > 0 ? `감사에서 확인할 점, 보류 쿠폰 ${i.held_count}장` : "감사에서 확인할 점" };
-  if (i.held_count > 0) return { cls: "bg-amber-500", label: `보류 쿠폰 ${i.held_count}장` };
+  if (i.checks_ok === false) return { cls: "bg-red-500", label: i.held_count > 0 ? `감사에서 확인할 점, 보류 중 보상 ${i.held_count}건` : "감사에서 확인할 점" };
+  if (i.held_count > 0) return { cls: "bg-amber-500", label: `보류 중 보상 ${i.held_count}건` };
   return null;
 }
 
@@ -130,10 +130,10 @@ function IncidentTabs({ recent, older, selected, onSelect }: { recent: IncidentS
 function SummaryStrip({ s }: { s: IncidentSummary }) {
   return (
     <div className="flex flex-wrap items-end gap-x-6 gap-y-2 rounded-2xl bg-surface-2 px-4 py-3">
-      <p className="text-sm tabular-nums text-ink-700">피해 {krw(s.damage_amount)} + 보상 {krw(s.compensation_total)} <span className="text-ink-500">({s.coupon_count}장)</span></p>
+      <p className="text-sm tabular-nums text-ink-700">피해 {krw(s.damage_amount)} · 보상으로 나간 돈 {krw(s.compensation_total)}</p>
       <div className="flex flex-wrap gap-1.5">
         {checkChip(s.checks_ok)}
-        {s.held_count > 0 && <Chip label={`보류 쿠폰 ${s.held_count}장`} tone={TONE.warn} />}
+        {s.held_count > 0 && <Chip label={`보류 중 보상 ${s.held_count}건`} tone={TONE.warn} />}
       </div>
     </div>
   );
@@ -196,12 +196,12 @@ function Cards({ d }: { d: IncidentDetail }) {
         ) : <p className="text-ink-500">데이터 AI의 영향 분석을 아직 받지 못했습니다.</p>}
       </Card>
 
-      <Card title="보상 쿠폰 장부 (마케팅이 지급)" value={krw(c.total_executed)}>
-        <p>지급 <b className="tabular-nums">{c.count_executed}장</b>{c.count_executed > 0 && c.coupons[0] && ` · 한 장 ${krw(c.coupons[0].unit_value)}`}</p>
+      <Card title="보상으로 나간 돈 (장부)" value={krw(c.total_executed)}>
+        <p>이 사건으로 실제 나간 금액입니다.</p>
         <p className={c.count_held ? "font-medium text-amber-700" : ""}>
-          보류 중 <b className="tabular-nums">{c.count_held}장</b>{c.count_held > 0 && ` (${krw(c.total_held)}) · 사람이 보류 큐에서 결정해야 합니다`}
+          보류 중 <b className="tabular-nums">{krw(c.total_held)}</b>{c.count_held > 0 && " · 사람이 보류 큐에서 결정해야 합니다"}
         </p>
-        <p className="text-[11px] text-ink-500">재무가 지급한 것이 아니라, 나간 쿠폰을 장부에 적은 것입니다. 보류 중인 쿠폰은 아직 나간 돈이 아닙니다.</p>
+        <p className="text-[11px] text-ink-500">보상 판정은 고객지원, 지급은 마케팅이 합니다. 재무는 빠져나간 돈만 적습니다. 보류 중인 금액은 아직 나간 돈이 아닙니다.</p>
       </Card>
 
       <Card title="보상 한도 사용" value={pi.limit == null ? "확인할 수 없음" : `${Math.round((pi.used / pi.limit) * 1000) / 10}%`}>
@@ -226,9 +226,9 @@ function Recipients({ d, onGoToQueue }: { d: IncidentDetail; onGoToQueue: (revie
   const needsHuman = (r: IncidentCoupon) => r.grade === "C" || r.status === "held";
   return (
     <div>
-      <h3 className="text-sm font-semibold text-ink-900">보상 쿠폰 장부 · 받은 고객 <span className="font-normal text-ink-500">{rows.length}건</span></h3>
+      <h3 className="text-sm font-semibold text-ink-900">보상으로 나간 내역 (장부) <span className="font-normal text-ink-500">{rows.length}건</span></h3>
       <p className="mt-0.5 text-xs text-ink-500">
-        누구에게 줄지는 고객지원 AI가 정하고 지급은 마케팅 AI가 합니다. 재무는 나간 내역을 적습니다.
+        누구에게 줄지는 고객지원 AI가 정하고 지급은 마케팅 AI가 합니다. 재무는 빠져나간 돈을 적고, 감사 때 근거로 씁니다.
         A는 한도 안이라 안전 장치가 바로 지급한 쿠폰, C는 한도를 넘거나 금액이 맞지 않아 사람 결정을 기다리는 쿠폰입니다(10분 안에 아무도 정하지 않으면 자동 취소).
       </p>
       {rows.length ? (
@@ -320,10 +320,10 @@ function NotOurJob() {
       <ul className="mt-1 list-disc space-y-0.5 pl-4">
         <li><b>쿠폰 한 장씩 승인</b>: 안전 장치가 판정합니다. 한도 안이면 A로 바로 지급, 넘거나 금액이 맞지 않으면 C로 보류합니다.</li>
         <li><b>누구에게 얼마를 줄지 정하기</b>: 고객지원 AI가 보상 기준표로 정합니다.</li>
-        <li><b>쿠폰 지급</b>: 마케팅 AI가 합니다.</li>
+        <li><b>쿠폰 지급</b>: 마케팅 AI가 합니다. 쿠폰 발행·관리는 재무 업무가 아닙니다 (마케팅·고객지원 합의).</li>
         <li><b>장애 손실 집계</b>: 재무 일이 아닙니다. 장애 비용은 평상시 장부로 들어가 결산·감사에서 드러납니다.</li>
       </ul>
-      <p className="mt-1 text-ink-500">재무는 나간 쿠폰·환불을 장부에 적고, 사건이 끝나면 감사합니다.</p>
+      <p className="mt-1 text-ink-500">재무는 보상·환불로 <b>빠져나간 돈</b>을 장부에 적고, 사건이 끝나면 감사합니다.</p>
     </aside>
   );
 }
@@ -386,9 +386,9 @@ export function IncidentFinance({ list, selected, onSelect, tick, onGoToQueue }:
           </h2>
           <p className="mt-0.5 max-w-3xl text-xs leading-relaxed text-ink-500">
             결제 같은 서비스에 장애가 나면 총괄 AI가 사건을 열고, 보상은 고객지원 AI가 정해 마케팅 AI가 지급합니다.
-            재무는 나간 쿠폰·환불을 사건별 장부에 적고, 사건이 끝나면 보상이 규칙대로 나갔는지 감사합니다. 장애 손실 집계는 재무가 하지 않습니다.
+            재무는 보상·환불로 <b>빠져나간 돈</b>을 사건별 장부에 적고, 사건이 끝나면 규칙대로 나갔는지 감사합니다. 쿠폰 업무와 장애 손실 집계는 재무가 하지 않습니다.
           </p>
-          {src && <p className="text-[11px] text-ink-500">쿠폰 장부 출처: {src.label}</p>}
+          {src && <p className="text-[11px] text-ink-500">장부 출처: {src.label}</p>}
         </div>
       </div>
 
