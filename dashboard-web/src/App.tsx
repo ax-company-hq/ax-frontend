@@ -3,6 +3,7 @@ import { Navigate, Route, Routes, useLocation } from 'react-router'
 import { ThemeProvider } from '@/components/ThemeProvider'
 import { AdminShell } from '@/components/admin/AdminShell'
 import AgentChat from '@/pages/AgentChat'
+import AgentOffice from '@/pages/AgentOffice'
 import Claims from '@/pages/Claims'
 import Console from '@/pages/Console'
 import Dashboard from '@/pages/Dashboard'
@@ -38,6 +39,7 @@ export function App() {
           <Route path="/hr" element={<Hr />} />
           <Route path="/planning" element={<PlanningPage />} />
           <Route path="/agents/chat" element={<AgentChat />} />
+          <Route path="/agents/office" element={<AgentOffice />} />
           <Route path="/support" element={<Support />} />
           {/* catbooks 시절 /admin/* 주소 호환 */}
           <Route path="/admin/*" element={<LegacyAdminRedirect />} />
