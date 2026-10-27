@@ -1,8 +1,8 @@
 import { won } from "@/lib/format";
-import type { AxClaim, AxClaimStatus } from "@/lib/axShop";
+import type { Claim, ClaimStatus } from "@/lib/types";
 
 // 고객지원 상태 → 화면 문구. 고객지원 모델에는 철회가 없다.
-const STATUS: Record<AxClaimStatus, { label: string; tone: string }> = {
+const STATUS: Record<ClaimStatus, { label: string; tone: string }> = {
   needs_info: { label: "정보 필요", tone: "bg-amber-50 text-amber-700" },
   needs_review: { label: "사람 확인 중", tone: "bg-violet-50 text-violet-700" },
   awaiting_return: { label: "반품 대기", tone: "bg-brand-50 text-brand-700" },
@@ -13,13 +13,13 @@ const STATUS: Record<AxClaimStatus, { label: string; tone: string }> = {
 };
 const LEVEL: Record<string, string> = { block: "text-red-800", review: "text-violet-700", warn: "text-amber-800", info: "text-ink-700" };
 
-export function AxClaimStatusBadge({ status }: { status: AxClaimStatus }) {
+export function AxClaimStatusBadge({ status }: { status: ClaimStatus }) {
   const s = STATUS[status] ?? { label: status, tone: "bg-ink-100 text-ink-700" };
   return <span className={`chip ${s.tone}`}>{s.label}</span>;
 }
 
 /** 고객지원이 돌려준 판정: 예상 환불액, 품목, 규칙 사유. 문장은 고객지원이 만든 그대로 보여 준다. */
-export function AxClaimSummary({ c }: { c: AxClaim }) {
+export function AxClaimSummary({ c }: { c: Claim }) {
   return (
     <div className="rounded-xl border border-ink-100 bg-surface-2 p-4 text-sm">
       {c.resolution && <p className="font-semibold">{c.resolution}</p>}

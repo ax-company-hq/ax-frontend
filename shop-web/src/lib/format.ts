@@ -23,3 +23,10 @@ export function ago(iso: string) {
 export const pct = (v: number | null | undefined, digits = 0) => (v == null ? "–" : `${(v * 100).toFixed(digits)}%`);
 export const shortDate = (iso: string) => { const d = new Date(iso + "T00:00:00"); return `${d.getMonth() + 1}/${d.getDate()}`; };
 export const longDate = (iso: string) => new Date(iso + "T00:00:00").toLocaleDateString("ko-KR", { month: "long", day: "numeric", weekday: "short" });
+
+/** 표지 색상. 상품 이미지가 없어서 ID로 정한다(같은 상품은 늘 같은 색). */
+export function hueOf(id: string) {
+  let h = 0;
+  for (const ch of id) h = (h * 31 + ch.charCodeAt(0)) % 360;
+  return h;
+}

@@ -5,8 +5,7 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useCart } from "@/lib/cart";
 import { DASHBOARD_WEB_URL } from "@/lib/env";
-import { won } from "@/lib/format";
-import type { Category, Health } from "@/lib/types";
+import { categoryLabel } from "@/lib/labels";
 import { IconCart, IconSearch, IconUser } from "../icons";
 import { ThemeToggle } from "../ThemeToggle";
 
@@ -24,13 +23,12 @@ export function ShopShell({ children }: { children: ReactNode }) {
   const path = usePathname();
   const { user, logout } = useAuth();
   const cart = useCart();
-  const [cats, setCats] = useState<Category[]>([]);
-  const [health, setHealth] = useState<Health | null>(null);
+  const [cats, setCats] = useState<string[]>([]);
   const [q, setQ] = useState("");
 
   useEffect(() => {
-    api.categories().then(setCats).catch(() => setCats([]));
-    api.health().then(setHealth).catch(() => setHealth(null));
+    // TODO(ax-backend#385): 카테고리 API가 생기면 api.categories로 바꾼다. 지금은 상품의 category_code를 묶는다.
+    api.products().then((ps) => setCats([...new Set(ps.map((p) => p.category_code))].sort())).catch(() => setCats([]));
   }, []);
 
   function search(e: FormEvent) {
@@ -39,9 +37,8 @@ export function ShopShell({ children }: { children: ReactNode }) {
   }
 
   const nav = [
-    { href: "/products?sort=popular", label: "베스트" },
-    { href: "/products?sort=new", label: "신상품" },
-    ...cats.map((c) => ({ href: `/products?category=${c.key}`, label: c.label })),
+    { href: "/products", label: "전체 상품" },
+    ...cats.map((c) => ({ href: `/products?category=${c}`, label: categoryLabel(c) })),
     { href: "/support", label: "고객센터" },
   ];
 
@@ -49,15 +46,15 @@ export function ShopShell({ children }: { children: ReactNode }) {
     <div className="theme-shop flex min-h-screen flex-col bg-canvas text-ink-900">
       <div className="border-b border-ink-100 bg-surface-2 text-xs text-ink-500">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-4 gap-y-1 px-4 py-1.5">
-          <span className="hidden sm:inline">데모 서점입니다 · 실제 결제·배송은 일어나지 않습니다</span>
+          <span className="hidden sm:inline">데모 서점입니다 · 실제 결제·배송은 일어나지 않습니다 · 판매 서버(shop-api)에 연결됩니다</span>
           <div className="ml-auto flex flex-wrap items-center gap-x-4 gap-y-1 whitespace-nowrap">
             {user ? (
               <>
-                <span className="font-medium text-ink-700">{user.name}님 · 적립금 <b className="text-accent">{won(user.points)}</b></span>
-                <button className="hover:text-ink-900" onClick={() => { logout(); router.push("/"); }}>로그아웃</button>
+                <span className="font-mono font-medium text-ink-700">{user.id}</span>
+                <button className="hover:text-ink-900" onClick={() => { logout(); router.push("/"); }}>선택 해제</button>
               </>
             ) : (
-              <Link href="/login" className="hover:text-ink-900">데모 로그인</Link>
+              <Link href="/login" className="hover:text-ink-900">구매자 선택</Link>
             )}
             <Link href="/orders" className="hover:text-ink-900">주문·배송</Link>
             <Link href={DASHBOARD_WEB_URL} className="hover:text-ink-900">상담원 콘솔</Link>
@@ -116,7 +113,7 @@ export function ShopShell({ children }: { children: ReactNode }) {
           </div>
           <div>
             <p className="font-semibold text-ink-700">데모 안내</p>
-            <p className="mt-1 leading-relaxed">상품·저자·출판사는 모두 가상 데이터입니다. 상담 답변은 {health?.llm_provider === "anthropic" ? "Claude" : "오프라인 규칙(mock)"}으로 생성되고, 환불 판정은 항상 규칙 엔진이 합니다.</p>
+            <p className="mt-1 leading-relaxed">상품은 모두 가상 데이터입니다. 취소·반품·교환 신청은 고객지원이 판정합니다.</p>
           </div>
         </div>
         <nav aria-label="약관" className="mx-auto flex max-w-6xl gap-4 px-4 pb-6">

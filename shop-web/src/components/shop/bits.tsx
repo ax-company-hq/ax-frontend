@@ -1,48 +1,26 @@
 import { Link } from "@/lib/nav";
 import { useEffect, type ReactNode } from "react";
-import { won } from "@/lib/format";
+import { hueOf, won } from "@/lib/format";
+import { categoryLabel } from "@/lib/labels";
 import type { Product } from "@/lib/types";
-import { IconStar } from "../icons";
 import { Cover } from "./Cover";
 
-export function Stars({ value, size = 14 }: { value: number | null; size?: number }) {
-  const v = value ?? 0;
-  return (
-    <span className="inline-flex items-center gap-0.5 text-amber-700" aria-label={value == null ? "평점 없음" : `평점 ${value}점`}>
-      {[1, 2, 3, 4, 5].map((i) => (
-        <span key={i} className={i <= Math.round(v) ? "" : "opacity-25"}><IconStar size={size} fill="currentColor" /></span>
-      ))}
-    </span>
-  );
-}
-
-export function Price({ p, big = false }: { p: Pick<Product, "list_price" | "sale_price" | "discount_pct">; big?: boolean }) {
-  return (
-    <div className="flex flex-wrap items-baseline gap-x-2">
-      {p.discount_pct > 0 && <span className={`font-bold text-accent ${big ? "text-xl" : "text-sm"}`}>{p.discount_pct}%</span>}
-      <span className={`font-bold tabular-nums ${big ? "text-2xl" : "text-base"}`}>{won(p.sale_price)}</span>
-      {p.discount_pct > 0 && <span className="text-xs text-ink-500 line-through tabular-nums">{won(p.list_price)}</span>}
-    </div>
-  );
+export function Price({ amount, big = false }: { amount: number; big?: boolean }) {
+  return <span className={`font-bold tabular-nums ${big ? "text-2xl" : "text-base"}`}>{won(amount)}</span>;
 }
 
 export function ProductCard({ p }: { p: Product }) {
+  const soldOut = p.stock <= 0;
   return (
-    <Link href={`/products/${p.id}`} className="group flex w-full flex-col gap-2">
+    <Link href={`/products/${p.product_id}`} className="group flex w-full flex-col gap-2">
       <div className="relative rounded-md bg-surface-2 p-4 transition group-hover:bg-ink-100">
-        <Cover title={p.title} hue={p.hue} category={p.category} className="mx-auto max-w-[170px]" />
-        {p.sold_out && <span className="absolute left-2 top-2 chip bg-ink-900 text-surface">일시품절</span>}
-        {!p.returnable && <span className="absolute right-2 top-2 chip bg-amber-100 text-amber-800">환불 제한</span>}
+        <Cover title={p.name} hue={hueOf(p.product_id)} category={p.category_code} className="mx-auto max-w-[170px]" />
+        {soldOut && <span className="absolute left-2 top-2 chip bg-ink-900 text-surface">일시품절</span>}
       </div>
       <div className="min-w-0">
-        <h3 className="line-clamp-2 break-keep text-sm font-semibold leading-snug group-hover:underline">{p.title}</h3>
-        <p className="mt-0.5 truncate text-xs text-ink-500">{p.author} · {p.publisher}</p>
-        <div className="mt-1.5"><Price p={p} /></div>
-        <div className="mt-1 flex items-center gap-1.5 text-xs text-ink-500">
-          <Stars value={p.rating} size={12} />
-          <span>{p.rating ?? "–"}</span>
-          <span>({p.review_count})</span>
-        </div>
+        <h3 className="line-clamp-2 break-keep text-sm font-semibold leading-snug group-hover:underline">{p.name}</h3>
+        <p className="mt-0.5 truncate text-xs text-ink-500">{categoryLabel(p.category_code)}</p>
+        <div className="mt-1.5"><Price amount={p.price} /></div>
       </div>
     </Link>
   );
@@ -94,9 +72,20 @@ export function RequireLogin({ children, user, ready }: { children: ReactNode; u
   if (!user) {
     return (
       <Empty>
-        로그인이 필요한 화면입니다. <Link href="/login" className="font-semibold text-brand-600 underline">데모 로그인</Link>
+        구매자를 먼저 선택해 주세요. <Link href="/login" className="font-semibold text-brand-600 underline">구매자 선택</Link>
       </Empty>
     );
   }
   return <>{children}</>;
+}
+
+/** shop-api에 아직 없는 기능을 오류 대신 안내로 막는다. TODO(ax-backend#385)로 연결할 자리. */
+export function NotReady({ feature, children }: { feature: string; children?: ReactNode }) {
+  return (
+    <div role="note" className="rounded-xl border border-dashed border-ink-300 bg-surface-2 px-4 py-6 text-center text-sm text-ink-500">
+      <p className="font-semibold text-ink-700">{feature} — 준비 중입니다</p>
+      <p className="mt-1 text-xs">판매 서버(shop-api)에 아직 없는 기능이라 열리면 이 자리에 연결됩니다.</p>
+      {children}
+    </div>
+  );
 }

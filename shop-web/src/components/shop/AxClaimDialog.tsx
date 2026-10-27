@@ -3,37 +3,38 @@ import { ErrorNote, Modal } from "./bits";
 import { won } from "@/lib/format";
 import { CLAIM_REASON_KO, CLAIM_TYPE_KO } from "@/lib/labels";
 import { AxClaimStatusBadge, AxClaimSummary } from "./AxClaimSummary";
-import { axShop, type AxClaim, type AxClaimReason, type AxClaimType, type AxOrder } from "@/lib/axShop";
+import { api } from "@/lib/api";
+import type { Claim, ClaimReason, ClaimType, Order } from "@/lib/types";
 
-const REASONS: Record<AxClaimType, AxClaimReason[]> = {
+const REASONS: Record<ClaimType, ClaimReason[]> = {
   cancel: ["change_of_mind", "other"],
   return: ["change_of_mind", "defect", "wrong_item", "damaged", "missing_item", "other"],
   exchange: ["defect", "wrong_item", "damaged", "change_of_mind", "other"],
 };
 
 /** 배송 완료 전에는 취소, 완료 후에는 반품·교환. 결제된 주문만. */
-export function axClaimTypes(o: AxOrder): AxClaimType[] {
+export function axClaimTypes(o: Order): ClaimType[] {
   if (o.status !== "paid") return [];
   return o.delivered_at ? ["return", "exchange"] : ["cancel"];
 }
 
-export function AxClaimDialog({ order, onClose, onDone }: { order: AxOrder; onClose: () => void; onDone: (c: AxClaim) => void }) {
+export function AxClaimDialog({ order, onClose, onDone }: { order: Order; onClose: () => void; onDone: (c: Claim) => void }) {
   const [types] = useState(() => axClaimTypes(order));
-  const [type, setType] = useState<AxClaimType>(types[0]);
-  const [reason, setReason] = useState<AxClaimReason>(REASONS[types[0]][0]);
+  const [type, setType] = useState<ClaimType>(types[0]);
+  const [reason, setReason] = useState<ClaimReason>(REASONS[types[0]][0]);
   const [on, setOn] = useState<Record<string, boolean>>(() => Object.fromEntries(order.items.map((i) => [i.order_item_id, true])));
   const [qty, setQty] = useState<Record<string, number>>(() => Object.fromEntries(order.items.map((i) => [i.order_item_id, i.qty])));
   const [unsealed, setUnsealed] = useState(false);
   const [photos, setPhotos] = useState(0);
   const [text, setText] = useState("");
-  const [result, setResult] = useState<AxClaim | null>(null);
+  const [result, setResult] = useState<Claim | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const picked = order.items.filter((i) => on[i.order_item_id]);
   const sellerFault = ["defect", "wrong_item", "damaged"].includes(reason);
 
-  function pickType(t: AxClaimType) {
+  function pickType(t: ClaimType) {
     setType(t);
     if (!REASONS[t].includes(reason)) setReason(REASONS[t][0]);
   }
@@ -42,7 +43,7 @@ export function AxClaimDialog({ order, onClose, onDone }: { order: AxOrder; onCl
     setBusy(true);
     setError(null);
     try {
-      const data = await axShop.submitClaim({
+      const data = await api.submitClaim({
         buyer_id: order.buyer_id, customer_name: order.buyer_id, order_id: order.order_id, type, reason,
         items: type === "cancel" ? undefined : picked.map((i) => ({ order_item_id: i.order_item_id, qty: Math.max(1, Math.min(i.qty, qty[i.order_item_id] ?? 1)) })),
         unsealed, evidence_count: photos, description: text || undefined,
@@ -58,7 +59,7 @@ export function AxClaimDialog({ order, onClose, onDone }: { order: AxOrder; onCl
 
   if (!types.length) return null;
   return (
-    <Modal title="취소·반품·교환 신청 (ax)" onClose={onClose} wide>
+    <Modal title="취소·반품·교환 신청" onClose={onClose} wide>
       {result ? (
         <div className="space-y-3">
           <p className="flex items-center gap-2 text-sm font-semibold">신청이 접수되었습니다 <span className="font-normal text-ink-500">(#{result.id})</span><AxClaimStatusBadge status={result.status} /></p>
@@ -78,7 +79,7 @@ export function AxClaimDialog({ order, onClose, onDone }: { order: AxOrder; onCl
           </fieldset>
           <label className="block">
             <span className="mb-1.5 block text-xs font-semibold text-ink-500">사유</span>
-            <select className="field" value={reason} onChange={(e) => setReason(e.target.value as AxClaimReason)}>
+            <select className="field" value={reason} onChange={(e) => setReason(e.target.value as ClaimReason)}>
               {REASONS[type].map((r) => <option key={r} value={r}>{CLAIM_REASON_KO[r]}</option>)}
             </select>
           </label>
