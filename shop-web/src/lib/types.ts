@@ -19,6 +19,10 @@ export interface Order {
   items: OrderItem[]; payments: Payment[];
 }
 
+// ---------------------------------------------------------------- inquiries
+export interface InquiryInput { buyer_id: string; order_id: string; subject?: string; body: string }
+export interface Inquiry { id: number | string; status: string; order_id: string; updated_at: string }
+
 export interface OrderLineInput { product_id: string; qty: number }
 
 // ---------------------------------------------------------------- claims

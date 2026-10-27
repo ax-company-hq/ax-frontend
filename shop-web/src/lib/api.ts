@@ -1,5 +1,5 @@
 import { SHOP_API_URL } from "./env";
-import type { CartPrice, Category, Claim, ClaimInput, DemoUser, Order, OrderLineInput, Product } from "./types";
+import type { CartPrice, Category, Claim, ClaimInput, DemoUser, Inquiry, InquiryInput, Order, OrderLineInput, Product } from "./types";
 
 // 판매 사이트 → shop-api(`/api/shop/*`)의 모든 호출은 이 파일 한 곳에 둔다.
 // 성공은 `{data, meta}`, 실패는 `{error: {code, message}}`. 로그인·토큰은 없고 구매자는 가명 ID(`buy_0001`…)다.
@@ -76,6 +76,9 @@ export const api = {
   /** 고객 신청 → shop-api → 고객지원. 금액은 보내지 않는다(고객지원이 주문 사실로 계산). */
   submitClaim: (b: ClaimInput) => post<Claim>("/api/shop/claims", b),
 
+  /** 1:1 문의 접수(토큰 없음). 주문이 필수이며 shop-api가 고객지원으로 넘긴다. 같은 내용을 10분 안에 다시 보내면 같은 접수로 처리된다. */
+  submitInquiry: (b: InquiryInput) => post<Inquiry>("/api/shop/inquiries", b),
+
   /** 데모 구매자 목록(가명 ID + 표시용 이름). 적립금은 없다. */
   demoUsers: () => request<DemoUser[]>("/api/shop/users"),
   demoUser: (buyerId: string) => request<DemoUser>(`/api/shop/users/${encodeURIComponent(buyerId)}`),
@@ -90,8 +93,8 @@ export const api = {
   // TODO(ax-backend#385): 클레임 환불액 미리보기, 신청 내역 조회·철회·사진 추가
   previewClaim: (_b: ClaimInput) => notReady<never>("환불액 미리보기"),
   claims: (_buyerId: string) => notReady<never>("신청 내역 조회"),
-  // TODO(ax-backend#385): 1:1 문의
-  inquiries: () => notReady<never>("1:1 문의"),
+  // TODO(ax-backend#385): 문의 내역 조회(shop-api에 목록 API 없음)
+  inquiryHistory: (_buyerId: string) => notReady<never>("문의 내역 조회"),
   // TODO(ax-backend#385): 후기
   reviews: (_productId: string) => notReady<never>("구매 후기"),
 };
