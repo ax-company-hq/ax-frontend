@@ -20,7 +20,7 @@
 | `/planning` | 기획개발 AI(캣북스 기획개발팀): 프로젝트·요청·작업·정리·소통·규정·자료·지표. 다른 부서 시뮬레이터는 넣지 않았다(개발 도구는 planning-web 3003). 화면 안 이동은 해시(`/planning#/requests`). 코드는 `src/planning/`(planning-web에서 옮김), 공통 컴포넌트 스타일은 `postcss.config.js`가 `.planning-scope` 안으로만 묶는다. 데이터는 기획개발 백엔드(`VITE_PLANNING_API_URL`, 기본 http://localhost:8101)의 `GET /api/planning/events`(SSE)·`/review-queue`로 받고, 버튼은 `POST /api/planning/actions`로 보낸다. 목 데이터·연동 버스·AI 어시스턴트(목 응답)는 쓰지 않는다. 백엔드가 꺼져 있으면 빈 화면에 '기획개발 서버 연결 안 됨' |
 
 상단 '쇼핑몰 보기'는 루트 `.env`의 `VITE_SHOP_WEB_URL`(기본 `http://localhost:3000`)을 연다.
-'기획개발 ↗'은 `VITE_PLANNING_WEB_URL`(기본 `http://localhost:3002`, 게이트웨이에서는 `/admin/planning/`)을 연다. 앱 사이 링크는 일반 `<a>`다 (`lib/nav.tsx`의 `Link`는 http(s)가 아니면 라우터 경로로 처리해 `/admin` 아래에서 깨진다).
+기획개발은 링크가 아니라 사이드바 「기획개발 AI」 탭(`/planning`)이다. 앱 사이 링크는 일반 `<a>`다 (`lib/nav.tsx`의 `Link`는 http(s)가 아니면 라우터 경로로 처리해 `/admin` 아래에서 깨진다).
 
 게이트웨이(한 포트)에서는 `DASHBOARD_WEB_BASE=/admin/`으로 빌드한다 (기본 `/`). 라우터 `basename`은 `import.meta.env.BASE_URL`에서 계산한다. `VITE_ADMIN_LOGIN=on`이면 화면 앞에 데모 비밀번호(`VITE_ADMIN_DEMO_PASSWORD`, 기본 `catbooks`)가 선다. 실제 인증이 아니고 비밀번호가 번들에 들어간다. 쓰기 요청(GET 외)에는 `VITE_SAFETY_HUMAN_TOKEN`을 `Authorization: Bearer`로 보낸다 (ax-backend #295).
 
