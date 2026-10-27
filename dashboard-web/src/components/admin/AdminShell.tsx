@@ -4,18 +4,13 @@ import { useEffect, useState, type ReactNode } from "react";
 import { api } from "@/lib/api";
 import { SHOP_WEB_URL } from "@/lib/env";
 import type { Health } from "@/lib/types";
-import { IconAgents, IconBell, IconBolt, IconBook, IconBox, IconChart, IconChat, IconDashboard, IconMegaphone, IconPlan, IconReceipt, IconSearch, IconShield, IconStar, IconUsers } from "../icons";
+import { IconAgents, IconBell, IconBolt, IconChart, IconDashboard, IconMegaphone, IconPlan, IconSearch, IconShield, IconUsers } from "../icons";
 import { ThemeToggle } from "../ThemeToggle";
 import { IconUser } from "../icons";
 
 const NAV = [
   { href: "/", label: "대시보드", Icon: IconDashboard },
   { href: "/orchestrator", label: "총괄", Icon: IconBolt },
-  { href: "/console", label: "상담 콘솔", Icon: IconChat },
-  { href: "/claims", label: "클레임 판정", Icon: IconReceipt },
-  { href: "/queue", label: "보상 큐", Icon: IconBox },
-  { href: "/reviews", label: "후기 관리", Icon: IconStar },
-  { href: "/kb", label: "지식베이스", Icon: IconBook },
   { href: "/finance", label: "재무 AI", Icon: IconShield },
   { href: "/data", label: "데이터분석 AI", Icon: IconChart },
   { href: "/hr", label: "인사 AI", Icon: IconUsers },
