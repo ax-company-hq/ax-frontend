@@ -1,14 +1,15 @@
 import { Link } from "@/lib/nav";
 import { useParams, useSearchParams } from "@/lib/nav";
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { AxClaimDialog, axClaimTypes } from "@/components/shop/AxClaimDialog";
 import { AxClaimStatusBadge, AxClaimSummary } from "@/components/shop/AxClaimSummary";
 import { ErrorNote, NotReady, RequireLogin } from "@/components/shop/bits";
 import { Cover } from "@/components/shop/Cover";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { dateStr, hueOf, shortDateTime, won } from "@/lib/format";
 import { CLAIM_REASON_KO, CLAIM_TYPE_KO, ORDER_STATUS_KO, ORDER_STATUS_TONE, PAYMENT_KO } from "@/lib/labels";
+import { failureGuide, lastFailedPayment, supportHref } from "@/lib/payment";
 import type { Claim, Order } from "@/lib/types";
 
 export default function OrderPage() {
@@ -24,6 +25,8 @@ function Detail() {
   const [error, setError] = useState<string | null>(null);
   const [claimOpen, setClaimOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [method, setMethod] = useState("card");
+  const inflight = useRef(false); // 결제 요청 중 플래그: state 반영 전의 연속 클릭도 막는다
 
   const load = useCallback(async () => {
     try { setO(await api.order(id)); setError(null); } catch (e) { setError((e as Error).message); }
@@ -36,9 +39,31 @@ function Detail() {
     try { await fn(); await load(); } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
   }
 
+  // 결제는 한 번에 하나만 보낸다. 응답이 오면 화면 값을 믿지 않고 서버의 주문을 다시 읽는다.
+  async function pay() {
+    if (!o || inflight.current) return;
+    inflight.current = true;
+    setBusy(true);
+    setError(null);
+    let note: string | null = null;
+    try {
+      await api.pay(o.order_id, method);
+    } catch (e) {
+      // 이미 결제됐거나 취소된 주문이다(다른 탭·연속 클릭). 다시 보내지 않고 상태를 안내한다.
+      note = e instanceof ApiError && e.code === "ORDER_NOT_PAYABLE" ? "이미 처리된 주문입니다. 최신 상태를 불러왔습니다." : (e as Error).message;
+    } finally {
+      await load(); // 서버의 주문을 다시 읽는다(load가 오류를 비우므로 안내는 그 뒤에 띄운다)
+      if (note) setError(note);
+      inflight.current = false;
+      setBusy(false);
+    }
+  }
+
   // 남의 주문은 보여 주지 않는다(shop-api는 주문 조회에서 구매자를 대조하지 않으므로 화면에서도 막는다).
   const mine = !o || !user || o.buyer_id === user.id;
   const payable = o && (o.status === "pending_payment" || o.status === "payment_failed");
+  const failed = o && o.status === "payment_failed" ? lastFailedPayment(o) : null;
+  const guide = o && o.status === "payment_failed" ? failureGuide(failed?.failure_code) : null;
 
   return (
     <RequireLogin user={user} ready={ready}>
@@ -87,8 +112,27 @@ function Detail() {
             </section>
           )}
 
+          {guide && (
+            <section role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-900">
+              <p className="font-bold">{guide.title}</p>
+              <p className="mt-1">{guide.hint}</p>
+              <p className="mt-3 text-xs text-red-800">
+                결제가 계속 안 되면 <Link href={supportHref(o.order_id)} className="font-semibold underline">이 주문으로 문의하기</Link>
+              </p>
+            </section>
+          )}
+
+          {payable && (
+            <div className="flex flex-wrap items-center gap-2" aria-label="결제 수단">
+              {[["card", "카드"], ["transfer", "계좌이체"], ["easy_pay", "간편결제"]].map(([k, l]) => (
+                <button key={k} disabled={busy} onClick={() => setMethod(k)} aria-pressed={method === k}
+                  className={`chip py-2 text-sm ${method === k ? "bg-brand-600 text-white" : "bg-ink-100 text-ink-700"}`}>{l}</button>
+              ))}
+            </div>
+          )}
+
           <div className="flex flex-wrap gap-2">
-            {payable && <button className="btn-primary" disabled={busy} onClick={() => act(() => api.pay(o.order_id, "card"))}>{busy ? "처리 중…" : o.status === "payment_failed" ? "다시 결제하기" : "결제하기"}</button>}
+            {payable && <button className="btn-primary" disabled={busy} onClick={pay}>{busy ? "처리 중…" : o.status === "payment_failed" ? "다른 수단으로 다시 결제하기" : "결제하기"}</button>}
             {payable && <button className="btn-ghost" disabled={busy} onClick={() => act(() => api.cancel(o.order_id))}>주문 취소</button>}
             {axClaimTypes(o).length > 0 && <button className="btn-ghost" onClick={() => setClaimOpen(true)}>{o.delivered_at ? "반품·교환 신청" : "취소 신청"}</button>}
           </div>
