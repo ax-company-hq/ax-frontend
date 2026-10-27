@@ -196,12 +196,12 @@ function Cards({ d }: { d: IncidentDetail }) {
         ) : <p className="text-ink-500">데이터 AI의 영향 분석을 아직 받지 못했습니다.</p>}
       </Card>
 
-      <Card title="보상 쿠폰 (지급된 것)" value={krw(c.total_executed)}>
+      <Card title="보상 쿠폰 장부 (마케팅이 지급)" value={krw(c.total_executed)}>
         <p>지급 <b className="tabular-nums">{c.count_executed}장</b>{c.count_executed > 0 && c.coupons[0] && ` · 한 장 ${krw(c.coupons[0].unit_value)}`}</p>
         <p className={c.count_held ? "font-medium text-amber-700" : ""}>
           보류 중 <b className="tabular-nums">{c.count_held}장</b>{c.count_held > 0 && ` (${krw(c.total_held)}) · 사람이 보류 큐에서 결정해야 합니다`}
         </p>
-        <p className="text-[11px] text-ink-500">보류 중인 쿠폰은 아직 나간 돈이 아니라 손실에 넣지 않습니다.</p>
+        <p className="text-[11px] text-ink-500">재무가 지급한 것이 아니라, 나간 쿠폰을 장부에 적은 것입니다. 보류 중인 쿠폰은 아직 나간 돈이 아닙니다.</p>
       </Card>
 
       <Card title="보상 한도 사용" value={pi.limit == null ? "확인할 수 없음" : `${Math.round((pi.used / pi.limit) * 1000) / 10}%`}>
@@ -226,8 +226,9 @@ function Recipients({ d, onGoToQueue }: { d: IncidentDetail; onGoToQueue: (revie
   const needsHuman = (r: IncidentCoupon) => r.grade === "C" || r.status === "held";
   return (
     <div>
-      <h3 className="text-sm font-semibold text-ink-900">보상 쿠폰 받은 고객 <span className="font-normal text-ink-500">{rows.length}건</span></h3>
+      <h3 className="text-sm font-semibold text-ink-900">보상 쿠폰 장부 · 받은 고객 <span className="font-normal text-ink-500">{rows.length}건</span></h3>
       <p className="mt-0.5 text-xs text-ink-500">
+        누구에게 줄지는 고객지원 AI가 정하고 지급은 마케팅 AI가 합니다. 재무는 나간 내역을 적습니다.
         A는 한도 안이라 안전 장치가 바로 지급한 쿠폰, C는 한도를 넘거나 금액이 맞지 않아 사람 결정을 기다리는 쿠폰입니다(10분 안에 아무도 정하지 않으면 자동 취소).
       </p>
       {rows.length ? (
@@ -291,7 +292,7 @@ function Checks({ checks }: { checks: IncidentCheck[] }) {
   return (
     <div>
       <h3 className="text-sm font-semibold text-ink-900">
-        ⑰ 사건 후 감사 <span className={`font-normal ${bad ? "text-red-700" : "text-ink-500"}`}>{checks.length ? (bad ? `확인할 점 ${bad}개` : "") : ""}</span>
+        사건 후 감사 <span className={`font-normal ${bad ? "text-red-700" : "text-ink-500"}`}>{checks.length ? (bad ? `확인할 점 ${bad}개` : "") : ""}</span>
       </h3>
       <p className="mt-0.5 text-xs text-ink-500">사건이 끝난 뒤 보상이 규칙대로 나갔는지 다시 봅니다. 한 장씩 막는 것이 아니라 나중에 점검하는 것입니다.</p>
       {checks.length ? (
@@ -320,8 +321,9 @@ function NotOurJob() {
         <li><b>쿠폰 한 장씩 승인</b>: 안전 장치가 판정합니다. 한도 안이면 A로 바로 지급, 넘거나 금액이 맞지 않으면 C로 보류합니다.</li>
         <li><b>누구에게 얼마를 줄지 정하기</b>: 고객지원 AI가 보상 기준표로 정합니다.</li>
         <li><b>쿠폰 지급</b>: 마케팅 AI가 합니다.</li>
+        <li><b>장애 손실 집계</b>: 재무 일이 아닙니다. 장애 비용은 평상시 장부로 들어가 결산·감사에서 드러납니다.</li>
       </ul>
-      <p className="mt-1 text-ink-500">재무는 나간 쿠폰을 장부에 적고, 손실을 정리하고, 끝난 뒤 감사합니다.</p>
+      <p className="mt-1 text-ink-500">재무는 나간 쿠폰·환불을 장부에 적고, 사건이 끝나면 감사합니다.</p>
     </aside>
   );
 }
@@ -383,8 +385,8 @@ export function IncidentFinance({ list, selected, onSelect, tick, onGoToQueue }:
             장애 사건 재무 <MockBadge meta={list.env?.meta} />
           </h2>
           <p className="mt-0.5 max-w-3xl text-xs leading-relaxed text-ink-500">
-            결제 같은 서비스에 장애가 나면 총괄 AI가 사건을 열고, 고객지원·마케팅 AI가 피해 고객에게 보상 쿠폰을 줍니다.
-            재무는 그 쿠폰을 사건별 장부에 적고(⑨), 피해와 보상을 더해 손실을 정리하고(⑩), 사건이 끝나면 보상이 규칙대로 나갔는지 감사합니다(⑰).
+            결제 같은 서비스에 장애가 나면 총괄 AI가 사건을 열고, 보상은 고객지원 AI가 정해 마케팅 AI가 지급합니다.
+            재무는 나간 쿠폰·환불을 사건별 장부에 적고, 사건이 끝나면 보상이 규칙대로 나갔는지 감사합니다. 장애 손실 집계는 재무가 하지 않습니다.
           </p>
           {src && <p className="text-[11px] text-ink-500">쿠폰 장부 출처: {src.label}</p>}
         </div>
