@@ -1,7 +1,7 @@
 import { Link } from "@/lib/nav";
 import { useRouter } from "@/lib/nav";
 import { useState } from "react";
-import { Empty, ErrorNote, NotReady, PageTitle, RequireLogin } from "@/components/shop/bits";
+import { Empty, ErrorNote, PageTitle, PriceSummary, RequireLogin, useCartPrice } from "@/components/shop/bits";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useCart } from "@/lib/cart";
@@ -14,7 +14,7 @@ export default function CheckoutPage() {
   const [method, setMethod] = useState("card");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const subtotal = cart.lines.reduce((n, l) => n + l.price * l.qty, 0);
+  const { price, error: priceError } = useCartPrice(cart.lines);
 
   // 주문 생성(pending_payment) → 가짜 결제. 합계·배송비는 서버 응답이 정한다.
   async function submit() {
@@ -41,7 +41,8 @@ export default function CheckoutPage() {
           <div className="space-y-6">
             <section className="rounded-xl border border-ink-100 bg-surface p-5">
               <h2 className="mb-3 text-sm font-bold">구매자</h2>
-              <p className="font-mono text-sm">{user?.id}</p>
+              <p className="text-sm font-medium">{user?.name ?? user?.id}</p>
+              {user?.name && <p className="font-mono text-xs text-ink-500">{user.id}</p>}
               {/* TODO(ax-backend#385): 받는 분·주소 입력은 shop-api 주문에 해당 필드가 생기면 추가한다 */}
             </section>
             <section className="rounded-xl border border-ink-100 bg-surface p-5">
@@ -63,13 +64,10 @@ export default function CheckoutPage() {
             </section>
           </div>
           <aside className="h-fit rounded-xl border border-ink-100 bg-surface p-5 text-sm">
-            <dl className="space-y-2">
-              <div className="flex justify-between"><dt className="text-ink-500">상품 금액</dt><dd className="tabular-nums">{won(subtotal)}</dd></div>
-            </dl>
-            <div className="mt-3"><NotReady feature="배송비·최종 결제 금액 미리보기" /></div>
+            <PriceSummary price={price} error={priceError} />
             <ErrorNote error={error} />
             <button className="btn-primary mt-4 w-full py-3" disabled={busy} onClick={submit}>{busy ? "결제 중…" : "주문하고 결제하기"}</button>
-            <p className="mt-2 text-[11px] text-ink-500">데모라 실제 결제는 일어나지 않습니다. 최종 금액과 영수증은 주문 상세에서 확인할 수 있어요.</p>
+            <p className="mt-2 text-[11px] text-ink-500">데모라 실제 결제는 일어나지 않습니다.</p>
           </aside>
         </div>
       )}

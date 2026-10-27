@@ -1,5 +1,5 @@
 import { SHOP_API_URL } from "./env";
-import type { Claim, ClaimInput, Order, OrderLineInput, Product } from "./types";
+import type { CartPrice, Category, Claim, ClaimInput, DemoUser, Order, OrderLineInput, Product } from "./types";
 
 // 판매 사이트 → shop-api(`/api/shop/*`)의 모든 호출은 이 파일 한 곳에 둔다.
 // 성공은 `{data, meta}`, 실패는 `{error: {code, message}}`. 로그인·토큰은 없고 구매자는 가명 ID(`buy_0001`…)다.
@@ -20,8 +20,7 @@ export class NotReadyError extends Error {
 export const isNotReady = (e: unknown): e is NotReadyError => e instanceof NotReadyError;
 
 // ---------------------------------------------------------------- 구매자(데모)
-// TODO(ax-backend#385): 이름·적립금이 있는 데모 사용자(`/api/shop/...`)가 생기면 이 가명 ID 선택을 바꾼다.
-export const BUYER_IDS = Array.from({ length: 30 }, (_, i) => `buy_${String(i + 1).padStart(4, "0")}`);
+// 구매자 목록은 shop-api(`/api/shop/users`)에서 받는다. 선택한 ID만 sessionStorage에 둔다(비밀번호·토큰 없음).
 const BUYER_KEY = "ax.buyer";
 export function storedBuyer(): string | null {
   try {
@@ -77,13 +76,17 @@ export const api = {
   /** 고객 신청 → shop-api → 고객지원. 금액은 보내지 않는다(고객지원이 주문 사실로 계산). */
   submitClaim: (b: ClaimInput) => post<Claim>("/api/shop/claims", b),
 
+  /** 데모 구매자 목록(가명 ID + 표시용 이름). 적립금은 없다. */
+  demoUsers: () => request<DemoUser[]>("/api/shop/users"),
+  demoUser: (buyerId: string) => request<DemoUser>(`/api/shop/users/${encodeURIComponent(buyerId)}`),
+  /** 구매자 선택. 서버는 토큰을 내주지 않고 `{user}`만 돌려준다. */
+  selectUser: (buyerId: string) => post<{ user: DemoUser }>("/api/shop/sessions", { buyer_id: buyerId }),
+  /** `name`이 null이면 코드를 그대로 보여 준다. */
+  categories: () => request<Category[]>("/api/shop/categories"),
+  /** 저장·재고 차감 없는 금액 미리보기. 배송비·결제액은 서버 값을 그대로 쓴다. */
+  cartPrice: (items: OrderLineInput[], pointsUsed = 0) => post<CartPrice>("/api/shop/cart/price", { items, points_used: pointsUsed }),
+
   // --- shop-api에 아직 없는 것: ax-backend#385 결과로 연결 --------------------
-  // TODO(ax-backend#385): 데모 사용자(이름·적립금)
-  demoUsers: () => notReady<never>("데모 로그인"),
-  // TODO(ax-backend#385): 카테고리 목록(지금은 상품의 category_code로 화면에서 묶는다)
-  categories: () => notReady<never>("카테고리 목록"),
-  // TODO(ax-backend#385): 장바구니 가격(배송비·합계). 주문 생성 응답의 total_amount가 실제 금액이다
-  cartPrice: (_lines: OrderLineInput[]) => notReady<never>("장바구니 가격 계산"),
   // TODO(ax-backend#385): 클레임 환불액 미리보기, 신청 내역 조회·철회·사진 추가
   previewClaim: (_b: ClaimInput) => notReady<never>("환불액 미리보기"),
   claims: (_buyerId: string) => notReady<never>("신청 내역 조회"),

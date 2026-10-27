@@ -46,12 +46,10 @@ export const OUTCOME_KO: Record<string, string> = {
   auto_rejected: "자동 거절", needs_info: "자료 요청", needs_review: "상담원 확인", approved_pending_return: "승인(입고 후 지급)", auto_approved: "자동 승인·지급",
 };
 
-// shop-api 주문·상품 코드. TODO(ax-backend#385): 카테고리 API가 생기면 라벨을 거기서 받는다.
+// shop-api 주문 상태 코드.
 export const ORDER_STATUS_KO: Record<string, string> = {
   pending_payment: "결제 대기", payment_failed: "결제 실패", paid: "결제 완료", cancelled: "취소됨",
 };
 export const ORDER_STATUS_TONE: Record<string, string> = {
   pending_payment: "bg-amber-50 text-amber-700", payment_failed: "bg-red-50 text-red-700", paid: "bg-emerald-50 text-emerald-700", cancelled: "bg-ink-100 text-ink-500",
 };
-export const CATEGORY_LABEL: Record<string, string> = { book: "도서", stationery: "문구" };
-export const categoryLabel = (code: string) => CATEGORY_LABEL[code] ?? code;

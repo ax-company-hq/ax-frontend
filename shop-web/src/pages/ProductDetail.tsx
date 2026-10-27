@@ -6,13 +6,14 @@ import { Cover } from "@/components/shop/Cover";
 import { api } from "@/lib/api";
 import { useCart } from "@/lib/cart";
 import { hueOf } from "@/lib/format";
-import { categoryLabel } from "@/lib/labels";
+import { useCategories } from "@/lib/categories";
 import type { Product } from "@/lib/types";
 
 export default function ProductPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const cart = useCart();
+  const { label: categoryLabel } = useCategories();
   const [p, setP] = useState<Product | null>(null);
   const [qty, setQty] = useState(1);
   const [error, setError] = useState<string | null>(null);
