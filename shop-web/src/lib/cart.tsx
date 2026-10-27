@@ -2,13 +2,10 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import type { Product } from "./types";
 
 export interface CartLine {
-  id: number;
+  id: string; // product_id
   title: string;
-  author: string;
-  category: string;
-  sale_price: number;
-  list_price: number;
-  hue: number;
+  category: string; // category_code
+  price: number; // 담을 때의 단가(표시용). 실제 금액은 주문 생성 시 서버가 정한다
   stock: number;
   qty: number;
 }
@@ -17,12 +14,12 @@ interface CartValue {
   lines: CartLine[];
   count: number;
   add: (p: Product, qty?: number) => void;
-  setQty: (id: number, qty: number) => void;
-  remove: (id: number) => void;
+  setQty: (id: string, qty: number) => void;
+  remove: (id: string) => void;
   clear: () => void;
 }
 
-const KEY = "catbooks.cart";
+const KEY = "ax.shop.cart"; // 예전 catbooks 장바구니(숫자 ID)와 섞이지 않게 키를 바꿨다
 const CartContext = createContext<CartValue | null>(null);
 
 export function CartProvider({ children }: { children: ReactNode }) {
@@ -51,14 +48,14 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const add = useCallback((p: Product, qty = 1) => {
     setLines((cur) => {
-      const have = cur.find((l) => l.id === p.id);
+      const have = cur.find((l) => l.id === p.product_id);
       const next = Math.min(20, Math.max(1, (have?.qty ?? 0) + qty));
-      if (have) return cur.map((l) => (l.id === p.id ? { ...l, qty: next } : l));
-      return [...cur, { id: p.id, title: p.title, author: p.author, category: p.category, sale_price: p.sale_price, list_price: p.list_price, hue: p.hue, stock: p.stock, qty: next }];
+      if (have) return cur.map((l) => (l.id === p.product_id ? { ...l, qty: next } : l));
+      return [...cur, { id: p.product_id, title: p.name, category: p.category_code, price: p.price, stock: p.stock, qty: next }];
     });
   }, []);
-  const setQty = useCallback((id: number, qty: number) => setLines((cur) => cur.map((l) => (l.id === id ? { ...l, qty: Math.min(20, Math.max(1, qty)) } : l))), []);
-  const remove = useCallback((id: number) => setLines((cur) => cur.filter((l) => l.id !== id)), []);
+  const setQty = useCallback((id: string, qty: number) => setLines((cur) => cur.map((l) => (l.id === id ? { ...l, qty: Math.min(20, Math.max(1, qty)) } : l))), []);
+  const remove = useCallback((id: string) => setLines((cur) => cur.filter((l) => l.id !== id)), []);
   const clear = useCallback(() => setLines([]), []);
 
   const value = useMemo(

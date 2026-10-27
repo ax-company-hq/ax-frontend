@@ -1,99 +1,94 @@
-import { ApiError } from "./apiError";
-import type { CartPrice, Category, Claim, ClaimInput, Decision, Health, Inquiry, InquiryItem, Me, Order, Product, ProductDetail, Review, Validation } from "./types";
-
 import { SHOP_API_URL } from "./env";
+import type { Claim, ClaimInput, Order, OrderLineInput, Product } from "./types";
 
-// 판매 사이트 → shop-api. 경로 목록은 README의 API 표 참고.
+// 판매 사이트 → shop-api(`/api/shop/*`)의 모든 호출은 이 파일 한 곳에 둔다.
+// 성공은 `{data, meta}`, 실패는 `{error: {code, message}}`. 로그인·토큰은 없고 구매자는 가명 ID(`buy_0001`…)다.
 const BASE = SHOP_API_URL;
-const USER_KEY = "catbooks.user";
 
-export { ApiError };
+export class ApiError extends Error {
+  constructor(message: string, public status: number, public code?: string) {
+    super(message);
+  }
+}
 
-export function storedUserId(): number | null {
+/** shop-api에 아직 없는 기능. 화면은 오류 대신 "준비 중" 안내를 보여 준다. */
+export class NotReadyError extends Error {
+  constructor(public feature: string) {
+    super(`${feature}은(는) 준비 중입니다.`);
+  }
+}
+export const isNotReady = (e: unknown): e is NotReadyError => e instanceof NotReadyError;
+
+// ---------------------------------------------------------------- 구매자(데모)
+// TODO(ax-backend#385): 이름·적립금이 있는 데모 사용자(`/api/shop/...`)가 생기면 이 가명 ID 선택을 바꾼다.
+export const BUYER_IDS = Array.from({ length: 30 }, (_, i) => `buy_${String(i + 1).padStart(4, "0")}`);
+const BUYER_KEY = "ax.buyer";
+export function storedBuyer(): string | null {
   try {
-    const v = localStorage.getItem(USER_KEY);
-    return v ? Number(v) : null;
+    return sessionStorage.getItem(BUYER_KEY);
   } catch {
     return null; // storage blocked
   }
 }
-export function storeUserId(id: number | null) {
+export function storeBuyer(id: string | null) {
   try {
-    if (id == null) localStorage.removeItem(USER_KEY);
-    else localStorage.setItem(USER_KEY, String(id));
+    if (id) sessionStorage.setItem(BUYER_KEY, id);
+    else sessionStorage.removeItem(BUYER_KEY);
   } catch {
     /* session-only */
   }
 }
 
-/** 응답 본문 해석: ax-backend 규약 `{data, meta}`이면 data를, 아니면(catbooks 백엔드) 본문 그대로 쓴다. */
-function unwrap<T>(body: unknown): T {
-  if (body && typeof body === "object" && !Array.isArray(body) && "data" in body && "meta" in body) return (body as { data: T }).data;
-  return body as T;
-}
-
-/** 실패 본문 해석: ax-backend `{error: {code, message}}`와 FastAPI `{detail}` 둘 다 받는다. */
-function toError(body: unknown, status: number): ApiError {
-  const b = (body ?? {}) as { error?: { code?: string; message?: string }; detail?: unknown };
-  if (b.error?.message) return new ApiError(b.error.message, status);
-  const detail = b.detail;
-  if (detail && typeof detail === "object" && "validation" in detail) {
-    const d = detail as { message: string; validation: Validation };
-    return new ApiError(d.message, status, d.validation);
-  }
-  return new ApiError(typeof detail === "string" ? detail : `요청 실패 (${status})`, status);
-}
+// ---------------------------------------------------------------- 호출
+interface Body<T> { data?: T; meta?: Record<string, unknown>; error?: { code?: string; message?: string } }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const uid = storedUserId();
-  const res = await fetch(`${BASE}${path}`, {
-    ...init,
-    headers: { "Content-Type": "application/json", ...(uid ? { "X-User-Id": String(uid) } : {}), ...(init?.headers ?? {}) },
-    cache: "no-store",
-  });
-  if (!res.ok) {
-    let body: unknown;
-    try {
-      body = await res.json();
-    } catch {
-      /* body was not JSON */
-    }
-    throw toError(body, res.status);
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}${path}`, { ...init, headers: { "Content-Type": "application/json" }, cache: "no-store" });
+  } catch {
+    throw new ApiError(`판매 서버(shop-api, ${BASE})에 연결할 수 없습니다. 서버가 실행 중인지 확인하세요.`, 0);
   }
-  return res.status === 204 ? (undefined as T) : unwrap<T>(await res.json());
+  const body = (await res.json().catch(() => null)) as Body<T> | null;
+  if (!res.ok || !body || body.data === undefined) {
+    throw new ApiError(body?.error?.message ?? `요청 실패 (${res.status})`, res.status, body?.error?.code);
+  }
+  return body.data;
 }
 
 const post = <T>(path: string, body?: unknown) =>
   request<T>(path, { method: "POST", body: body === undefined ? undefined : JSON.stringify(body) });
 
-export const api = {
-  health: () => request<Health>("/api/health"),
-  // customer
-  users: () => request<Me[]>("/api/users"),
-  me: () => request<Me>("/api/me"),
-  categories: () => request<Category[]>("/api/categories"),
-  products: (p: { category?: string; q?: string; sort?: string } = {}) => {
-    const qs = new URLSearchParams(Object.entries(p).filter(([, v]) => v) as [string, string][]).toString();
-    return request<Product[]>(`/api/products${qs ? `?${qs}` : ""}`);
-  },
-  product: (id: number) => request<ProductDetail>(`/api/products/${id}`),
-  helpful: (id: number) => post<{ helpful: number }>(`/api/reviews/${id}/helpful`),
-  writeReview: (b: { order_item_id: number; rating: number; title: string; body: string }) =>
-    post<Review & { held: boolean; message: string }>("/api/reviews", b),
-  price: (lines: { product_id: number; qty: number }[]) => post<CartPrice>("/api/cart/price", lines),
-  placeOrder: (b: { lines: { product_id: number; qty: number }[]; points_used: number; payment_method: string; receiver: string; address: string }) =>
-    post<Order>("/api/orders", b),
-  orders: () => request<Order[]>("/api/orders"),
-  order: (id: number) => request<Order>(`/api/orders/${id}`),
-  advance: (id: number, late_days = 0) => post<Order>(`/api/orders/${id}/advance`, { late_days }),
-  previewClaim: (b: ClaimInput) => post<Decision>("/api/claims/preview", b),
-  submitClaim: (b: ClaimInput) => post<Claim>("/api/claims", b),
-  myClaims: () => request<Claim[]>("/api/claims"),
-  addEvidence: (id: number, count = 1) => post<Claim>(`/api/claims/${id}/evidence`, { count }),
-  withdrawClaim: (id: number) => post<Claim>(`/api/claims/${id}/withdraw`),
-  inquiries: () => request<InquiryItem[]>("/api/inquiries"),
-  inquiry: (id: number) => request<Inquiry>(`/api/inquiries/${id}`),
-  newInquiry: (b: { subject: string; message: string; order_id?: number | null }) => post<Inquiry>("/api/inquiries", b),
-  followUp: (id: number, text: string) => post<Inquiry>(`/api/inquiries/${id}/messages`, { text }),
+const notReady = <T>(feature: string): Promise<T> => Promise.reject(new NotReadyError(feature));
 
+export const api = {
+  // --- shop-api에 있는 것 -------------------------------------------------
+  products: (p: { category_code?: string } = {}) =>
+    request<Product[]>(`/api/shop/products${p.category_code ? `?category_code=${encodeURIComponent(p.category_code)}` : ""}`),
+  product: (id: string) => request<Product>(`/api/shop/products/${encodeURIComponent(id)}`),
+  orders: (buyerId: string) => request<Order[]>(`/api/shop/orders?buyer_id=${encodeURIComponent(buyerId)}`),
+  order: (id: string) => request<Order>(`/api/shop/orders/${encodeURIComponent(id)}`),
+  /** 합계·배송비·포인트 배분은 서버가 계산한다(주문 생성 직후 `pending_payment`). */
+  placeOrder: (b: { buyer_id: string; items: OrderLineInput[]; points_used?: number }) => post<Order>("/api/shop/orders", b),
+  /** 가짜 결제. 실패하면 주문이 `payment_failed`로 돌아오고 다시 결제할 수 있다. */
+  pay: (orderId: string, method_code: string) => post<Order>(`/api/shop/orders/${encodeURIComponent(orderId)}/payments`, { method_code }),
+  /** 결제 전(pending_payment·payment_failed) 주문만 취소된다. 결제 후 취소·환불은 클레임으로 한다. */
+  cancel: (orderId: string) => post<Order>(`/api/shop/orders/${encodeURIComponent(orderId)}/cancel`, { reason_code: "buyer" }),
+  /** 고객 신청 → shop-api → 고객지원. 금액은 보내지 않는다(고객지원이 주문 사실로 계산). */
+  submitClaim: (b: ClaimInput) => post<Claim>("/api/shop/claims", b),
+
+  // --- shop-api에 아직 없는 것: ax-backend#385 결과로 연결 --------------------
+  // TODO(ax-backend#385): 데모 사용자(이름·적립금)
+  demoUsers: () => notReady<never>("데모 로그인"),
+  // TODO(ax-backend#385): 카테고리 목록(지금은 상품의 category_code로 화면에서 묶는다)
+  categories: () => notReady<never>("카테고리 목록"),
+  // TODO(ax-backend#385): 장바구니 가격(배송비·합계). 주문 생성 응답의 total_amount가 실제 금액이다
+  cartPrice: (_lines: OrderLineInput[]) => notReady<never>("장바구니 가격 계산"),
+  // TODO(ax-backend#385): 클레임 환불액 미리보기, 신청 내역 조회·철회·사진 추가
+  previewClaim: (_b: ClaimInput) => notReady<never>("환불액 미리보기"),
+  claims: (_buyerId: string) => notReady<never>("신청 내역 조회"),
+  // TODO(ax-backend#385): 1:1 문의
+  inquiries: () => notReady<never>("1:1 문의"),
+  // TODO(ax-backend#385): 후기
+  reviews: (_productId: string) => notReady<never>("구매 후기"),
 };

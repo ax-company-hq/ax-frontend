@@ -1,13 +1,14 @@
 import { Link } from "@/lib/nav";
 import { useRouter, useSearchParams } from "@/lib/nav";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { Empty, ErrorNote, PageTitle, ProductCard } from "@/components/shop/bits";
 import { api } from "@/lib/api";
-import type { Category, Product } from "@/lib/types";
+import { categoryLabel } from "@/lib/labels";
+import type { Product } from "@/lib/types";
 
+// TODO(ax-backend#385): 판매량순·신상품순과 서버 검색·카테고리 API가 생기면 서버 기준으로 바꾼다. 지금은 shop-api 상품 목록을 화면에서 거른다.
 const SORTS = [
-  { key: "popular", label: "판매량순" },
-  { key: "new", label: "신상품순" },
+  { key: "default", label: "기본순" },
   { key: "price_asc", label: "낮은 가격순" },
   { key: "price_desc", label: "높은 가격순" },
 ];
@@ -25,23 +26,28 @@ function List() {
   const router = useRouter();
   const category = params.get("category") ?? "";
   const q = params.get("q") ?? "";
-  const sort = params.get("sort") ?? "popular";
-  const [items, setItems] = useState<Product[] | null>(null);
-  const [cats, setCats] = useState<Category[]>([]);
+  const sort = params.get("sort") ?? "default";
+  const [all, setAll] = useState<Product[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => { api.categories().then(setCats).catch(() => undefined); }, []);
-  useEffect(() => {
-    setItems(null);
-    api.products({ category, q, sort }).then(setItems).catch(() => setError("상품을 불러오지 못했습니다."));
-  }, [category, q, sort]);
+  useEffect(() => { api.products().then(setAll).catch((e: Error) => setError(e.message)); }, []);
+
+  const cats = useMemo(() => [...new Set((all ?? []).map((p) => p.category_code))].sort(), [all]);
+  const items = useMemo(() => {
+    if (!all) return null;
+    const needle = q.trim().toLowerCase();
+    const list = all.filter((p) => (!category || p.category_code === category) && (!needle || p.name.toLowerCase().includes(needle)));
+    if (sort === "price_asc") return [...list].sort((a, b) => a.price - b.price);
+    if (sort === "price_desc") return [...list].sort((a, b) => b.price - a.price);
+    return list;
+  }, [all, category, q, sort]);
 
   const go = (next: Record<string, string>) => {
     const sp = new URLSearchParams({ ...(category && { category }), ...(q && { q }), sort, ...next });
-    for (const [k, v] of [...sp.entries()]) if (!v) sp.delete(k);
+    for (const [k, v] of [...sp.entries()]) if (!v || (k === "sort" && v === "default")) sp.delete(k);
     router.push(`/products?${sp.toString()}`);
   };
-  const title = q ? `‘${q}’ 검색 결과` : cats.find((c) => c.key === category)?.label ?? "전체 상품";
+  const title = q ? `'${q}' 검색 결과` : category ? categoryLabel(category) : "전체 상품";
 
   return (
     <div>
@@ -54,16 +60,16 @@ function List() {
           </label>
         } />
       <div className="mb-6 flex flex-wrap gap-2">
-        <Link href={`/products?sort=${sort}`} className={`chip py-1.5 text-xs ${!category ? "bg-brand-600 text-white" : "bg-ink-100 text-ink-700"}`}>전체</Link>
+        <Link href="/products" className={`chip py-1.5 text-xs ${!category ? "bg-brand-600 text-white" : "bg-ink-100 text-ink-700"}`}>전체</Link>
         {cats.map((c) => (
-          <Link key={c.key} href={`/products?category=${c.key}&sort=${sort}`}
-            className={`chip py-1.5 text-xs ${category === c.key ? "bg-brand-600 text-white" : "bg-ink-100 text-ink-700"}`}>{c.label} {c.count}</Link>
+          <Link key={c} href={`/products?category=${c}`}
+            className={`chip py-1.5 text-xs ${category === c ? "bg-brand-600 text-white" : "bg-ink-100 text-ink-700"}`}>{categoryLabel(c)}</Link>
         ))}
       </div>
       <ErrorNote error={error} />
       {items && !items.length && <Empty>조건에 맞는 상품이 없습니다.</Empty>}
       <div className="grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 lg:grid-cols-5">
-        {(items ?? []).map((p) => <ProductCard key={p.id} p={p} />)}
+        {(items ?? []).map((p) => <ProductCard key={p.product_id} p={p} />)}
       </div>
     </div>
   );

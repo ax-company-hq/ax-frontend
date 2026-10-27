@@ -1,50 +1,35 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { api, storeUserId, storedUserId } from "./api";
-import type { Me } from "./types";
+import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import { storeBuyer, storedBuyer } from "./api";
+
+/** 구매자 한 명(가명 ID). TODO(ax-backend#385): 이름·적립금이 있는 데모 사용자가 생기면 필드를 늘린다. */
+export interface Buyer { id: string }
 
 interface AuthValue {
-  user: Me | null;
+  user: Buyer | null;
   ready: boolean;
-  login: (id: number) => Promise<void>;
+  login: (id: string) => void;
   logout: () => void;
-  refresh: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthValue | null>(null);
 
-/** Demo sign-in: pick one of the seeded customers. The id is sent as X-User-Id on every request. */
+/** 데모 구매자 선택. shop-api에는 로그인이 없어 ID는 sessionStorage에만 두고 주문 요청 본문에 실어 보낸다. */
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<Me | null>(null);
-  const [ready, setReady] = useState(false);
+  const [user, setUser] = useState<Buyer | null>(() => {
+    const id = storedBuyer();
+    return id ? { id } : null;
+  });
 
-  const refresh = useCallback(async () => {
-    if (storedUserId() == null) {
-      setUser(null);
-      return;
-    }
-    try {
-      setUser(await api.me());
-    } catch {
-      storeUserId(null);
-      setUser(null);
-    }
+  const login = useCallback((id: string) => {
+    storeBuyer(id);
+    setUser({ id });
   }, []);
-
-  useEffect(() => {
-    refresh().finally(() => setReady(true));
-  }, [refresh]);
-
-  const login = useCallback(async (id: number) => {
-    storeUserId(id);
-    await refresh();
-  }, [refresh]);
-
   const logout = useCallback(() => {
-    storeUserId(null);
+    storeBuyer(null);
     setUser(null);
   }, []);
 
-  const value = useMemo(() => ({ user, ready, login, logout, refresh }), [user, ready, login, logout, refresh]);
+  const value = useMemo(() => ({ user, ready: true, login, logout }), [user, login, logout]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
