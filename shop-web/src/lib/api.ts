@@ -1,5 +1,5 @@
 import { SHOP_API_URL } from "./env";
-import type { CartPrice, Category, Claim, ClaimInput, DemoUser, Inquiry, InquiryInput, Order, OrderLineInput, Product } from "./types";
+import type { Banner, CartPrice, Category, Claim, ClaimInput, DemoUser, Inquiry, InquiryInput, Order, OrderLineInput, Product } from "./types";
 
 // 판매 사이트 → shop-api(`/api/shop/*`)의 모든 호출은 이 파일 한 곳에 둔다.
 // 성공은 `{data, meta}`, 실패는 `{error: {code, message}}`. 로그인·토큰은 없고 구매자는 가명 ID(`buy_0001`…)다.
@@ -84,6 +84,8 @@ export const api = {
   demoUser: (buyerId: string) => request<DemoUser>(`/api/shop/users/${encodeURIComponent(buyerId)}`),
   /** 구매자 선택. 서버는 토큰을 내주지 않고 `{user}`만 돌려준다. */
   selectUser: (buyerId: string) => post<{ user: DemoUser }>("/api/shop/sessions", { buyer_id: buyerId }),
+  /** 게시 중이고 기간 안인 공지 배너(토큰 없음). 서버는 게시 오래된 순으로 준다. */
+  banners: () => request<Banner[]>("/api/shop/banners"),
   /** `name`이 null이면 코드를 그대로 보여 준다. */
   categories: () => request<Category[]>("/api/shop/categories"),
   /** 저장·재고 차감 없는 금액 미리보기. 배송비·결제액은 서버 값을 그대로 쓴다. */

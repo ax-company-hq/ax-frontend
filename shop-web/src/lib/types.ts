@@ -46,6 +46,8 @@ export interface Claim {
 // ---------------------------------------------------------------- 데모 사용자·카테고리·장바구니 가격
 /** 가명 구매자. 이름은 표시용 데모 이름이고 개인정보·적립금은 없다. */
 export interface DemoUser { buyer_id: string; display_name: string }
+/** `GET /api/shop/banners`가 주는 게시 중 배너. `text`는 서버가 준 공개 문구 그대로 보여 준다. */
+export interface Banner { notice_id: string; text: string; status: string; valid_from: string | null; valid_to: string | null; context_id: string | null; created_at: string; ended_at: string | null }
 /** 표시 이름(`name`)을 모르는 코드는 null이다. 지어내지 않고 코드를 그대로 보여 준다. */
 export interface Category { category_code: string; name: string | null; product_count: number }
 export interface CartPriceItem { product_id: string; title: string; qty: number; unit_price: number; line_amount: number }
