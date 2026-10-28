@@ -6,6 +6,7 @@ import { useCart } from "@/lib/cart";
 import { DASHBOARD_WEB_URL } from "@/lib/env";
 import { useCategories } from "@/lib/categories";
 import { IconCart, IconSearch, IconUser } from "../icons";
+import { NoticeBanners } from "./NoticeBanners";
 import { ThemeToggle } from "../ThemeToggle";
 
 function Logo() {
@@ -38,6 +39,7 @@ export function ShopShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="theme-shop flex min-h-screen flex-col bg-canvas text-ink-900">
+      <NoticeBanners />
       <div className="border-b border-ink-100 bg-surface-2 text-xs text-ink-500">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-4 gap-y-1 px-4 py-1.5">
           <span className="hidden sm:inline">데모 서점입니다 · 실제 결제·배송은 일어나지 않습니다 · 판매 서버(shop-api)에 연결됩니다</span>

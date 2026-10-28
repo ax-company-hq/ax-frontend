@@ -44,6 +44,7 @@ API 주소는 루트 `.env`의 `VITE_SHOP_API_URL`(기본 `http://localhost:8010
 | GET | `/api/shop/orders?buyer_id`, `/api/shop/orders/{id}` | 주문 내역·상세 |
 | GET | `/api/shop/users`, `/api/shop/users/{id}` | 데모 구매자 목록·조회(가명 ID + 표시 이름, 적립금 없음) |
 | POST | `/api/shop/sessions` | 구매자 선택 확인(토큰 없음) |
+| GET | `/api/shop/banners` | 화면 맨 위 공지 배너(게시 중·기간 안만, 토큰 없음). 30초마다 다시 읽고, 0건·조회 실패면 아무것도 그리지 않는다. 문구는 텍스트로만 그린다 |
 | GET | `/api/shop/categories` | 카테고리 목록(표시 이름이 null이면 코드를 그대로 표시) |
 | POST | `/api/shop/cart/price` | 장바구니·결제 전 금액 미리보기(배송비·결제액은 서버 값, 쿠폰 할인은 null이면 "확인 필요") |
 | POST | `/api/shop/orders` | 주문 생성(`pending_payment`, 합계·배송비는 서버 계산) |
