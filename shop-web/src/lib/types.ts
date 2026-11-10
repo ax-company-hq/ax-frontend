@@ -12,6 +12,10 @@ export interface OrderItem {
 export interface Payment {
   payment_id: string; amount: number; method_code: string; status: string; failure_code: string | null; created_at: string;
 }
+/** `GET /payment-config`. `toss_test`면 토스 결제위젯, `fake`면 데모 결제. */
+export interface PaymentConfig { provider: "fake" | "toss_test" | string }
+/** `POST /orders/{id}/payments/toss/prepare`. `toss_order_id` = `{order_id}-a{시도 번호}` */
+export interface TossPrepared { toss_order_id: string; amount: number; order_name: string }
 export type OrderStatus = "pending_payment" | "payment_failed" | "paid" | "cancelled";
 export interface Order {
   order_id: string; buyer_id: string; status: OrderStatus | string; total_amount: number; refunded_amount: number; shipping_fee: number; points_used: number;

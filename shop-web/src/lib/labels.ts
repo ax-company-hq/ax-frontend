@@ -23,7 +23,7 @@ export const CLAIM_STATUS_TONE: Record<string, string> = {
   withdrawn: "bg-ink-100 text-ink-500",
 };
 export const INSPECTION_KO: Record<string, string> = { pending: "검수 대기", ok: "정상", mismatch: "사유와 불일치" };
-export const PAYMENT_KO: Record<string, string> = { card: "신용·체크카드", transfer: "계좌이체", easy_pay: "간편결제" };
+export const PAYMENT_KO: Record<string, string> = { card: "신용·체크카드", transfer: "계좌이체", easy_pay: "간편결제", phone: "휴대폰", other: "기타 결제" };
 
 /** Rule codes in plain Korean, for the agent's rule tables. */
 export const RULE_KO: Record<string, string> = {

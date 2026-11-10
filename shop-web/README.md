@@ -14,6 +14,7 @@
 | `/cart`, `/checkout` | 장바구니(브라우저 저장), 주문·결제 |
 | `/login` | 구매자 선택(가명 ID) |
 | `/orders`, `/orders/:id` | 주문 내역, 주문 상세(결제·취소·클레임 신청) |
+| `/payments/success`, `/payments/fail` | 토스 결제위젯 리다이렉트: 승인 결과, 실패·취소 안내 |
 | `/support` | 고객센터(1:1 문의는 준비 중) |
 
 ## 2. 실행 방법
@@ -49,9 +50,20 @@ API 주소는 루트 `.env`의 `VITE_SHOP_API_URL`(기본 `http://localhost:8010
 | POST | `/api/shop/cart/price` | 장바구니·결제 전 금액 미리보기(배송비·결제액은 서버 값, 쿠폰 할인은 null이면 "확인 필요") |
 | POST | `/api/shop/orders` | 주문 생성(`pending_payment`, 합계·배송비는 서버 계산) |
 | POST | `/api/shop/orders/{id}/payments` | 가짜 결제 |
+| GET | `/api/shop/payment-config` | 결제 방식(`fake`·`toss_test`). 화면이 토스 결제위젯을 쓸지 정한다 |
+| POST | `/api/shop/orders/{id}/payments/toss/prepare` | 토스 테스트 결제 시도(`toss_order_id`·서버 금액·주문명) |
+| POST | `/api/shop/payments/toss/confirm` | 결제위젯 성공 리다이렉트 값으로 승인(다시 불러도 처음 결과, 두 번 승인 안 됨) |
 | POST | `/api/shop/orders/{id}/cancel` | 결제 전 주문 취소 |
 | POST | `/api/shop/claims` | 취소·반품·교환 신청(고객지원으로 전달) |
 | POST | `/api/shop/inquiries` | 1:1 문의 접수(주문 선택 필수, 토큰 없음, 구매자당 5/분, 본문 2000자·제목 100자, 같은 내용은 10분 안에 같은 접수). ax-backend #419 머지 후 동작 |
+
+### 토스페이먼츠 테스트 결제
+shop-api가 `PAYMENT_PROVIDER=toss_test`이고 루트 `.env`에 `VITE_TOSS_CLIENT_KEY`(결제위젯 연동 키의 **클라이언트 키**, `test_gck_`로 시작)가 있으면 결제 화면·주문 상세의 결제 수단 자리에 토스 결제위젯이 나온다. 둘 중 하나라도 없으면 지금의 데모 결제 그대로다.
+
+- 흐름: 주문 생성 → `prepare` → (금액이 다르면 서버 금액으로 `setAmount`) → 장바구니 비우기 → `requestPayment` → `/payments/success`에서 `confirm` / `/payments/fail`에서 안내
+- 시크릿 키는 화면에 두지 않는다(shop-api만 가진다). 테스트 결제는 토스 문서의 테스트 결제 방법으로만 한다.
+- 게이트웨이 이미지는 빌드 인자 `VITE_TOSS_CLIENT_KEY`(기본 비움)로 받는다. 두 경로는 nginx `try_files … /index.html`로 SPA가 연다.
+- 코드: `src/lib/toss.ts`(경로 판단·위젯), `src/components/shop/TossWidgetBox.tsx`, `src/pages/PaymentSuccess.tsx`·`PaymentFail.tsx`
 
 ### 준비 중인 기능 (ax-backend#385 결과를 기다림)
 shop-api에 아직 없어서 화면에서 오류 대신 "준비 중" 안내를 보여 준다. 코드에는 `TODO(ax-backend#385)`가 붙어 있고, 연결 자리는 `api.ts` 아래쪽 스텁(`previewClaim`·`claims`·`inquiryHistory`·`reviews`)이다.

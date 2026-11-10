@@ -11,6 +11,8 @@ import Legal from '@/pages/Legal'
 import Login from '@/pages/Login'
 import OrderDetail from '@/pages/OrderDetail'
 import Orders from '@/pages/Orders'
+import PaymentFail from '@/pages/PaymentFail'
+import PaymentSuccess from '@/pages/PaymentSuccess'
 import ProductDetail from '@/pages/ProductDetail'
 import Products from '@/pages/Products'
 import Support from '@/pages/Support'
@@ -31,6 +33,8 @@ export function App() {
               <Route path="/ax-orders" element={<Navigate to="/orders" replace />} />
               <Route path="/orders" element={<Orders />} />
               <Route path="/orders/:id" element={<OrderDetail />} />
+              <Route path="/payments/success" element={<PaymentSuccess />} />
+              <Route path="/payments/fail" element={<PaymentFail />} />
               <Route path="/support" element={<Support />} />
               <Route path="/terms" element={<Legal kind="terms" />} />
               <Route path="/buyer-terms" element={<Legal kind="buyer-terms" />} />
