@@ -12,6 +12,7 @@
   "dependencies": {
     "@ax/types": "*",
     "@dejafix/common-frontend": "git+https://github.com/DejaFix/common-frontend.git#v0.1.0",
+    "@tosspayments/tosspayments-sdk": "^2.10.0",
     "pretendard": "^1.3.9",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",

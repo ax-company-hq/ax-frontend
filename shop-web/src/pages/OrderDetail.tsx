@@ -1,15 +1,17 @@
 import { Link } from "@/lib/nav";
-import { useParams, useSearchParams } from "@/lib/nav";
+import { useParams, useRouter, useSearchParams } from "@/lib/nav";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { AxClaimDialog, axClaimTypes } from "@/components/shop/AxClaimDialog";
 import { AxClaimStatusBadge, AxClaimSummary } from "@/components/shop/AxClaimSummary";
 import { ErrorNote, NotReady, RequireLogin } from "@/components/shop/bits";
 import { Cover } from "@/components/shop/Cover";
+import { TossWidgetBox } from "@/components/shop/TossWidgetBox";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { dateStr, hueOf, shortDateTime, won } from "@/lib/format";
 import { CLAIM_REASON_KO, CLAIM_TYPE_KO, ORDER_STATUS_KO, ORDER_STATUS_TONE, PAYMENT_KO } from "@/lib/labels";
 import { failureGuide, lastFailedPayment, supportHref } from "@/lib/payment";
+import { failHref, isInputError, TossRequestError, usePayPath, useTossWidget } from "@/lib/toss";
 import type { Claim, Order } from "@/lib/types";
 
 export default function OrderPage() {
@@ -18,7 +20,9 @@ export default function OrderPage() {
 
 function Detail() {
   const { id } = useParams<{ id: string }>();
-  const placed = useSearchParams().get("placed") === "1";
+  const search = useSearchParams();
+  const placed = search.get("placed") === "1";
+  const payHint = search.get("payhint") === "1"; // 결제 화면에서 위젯 입력이 모자라 넘어온 경우(문구는 고정)
   const { user, ready } = useAuth();
   const [o, setO] = useState<Order | null>(null);
   const [claims, setClaims] = useState<Claim[]>([]);
@@ -27,6 +31,8 @@ function Detail() {
   const [busy, setBusy] = useState(false);
   const [method, setMethod] = useState("card");
   const inflight = useRef(false); // 결제 요청 중 플래그: state 반영 전의 연속 클릭도 막는다
+  const router = useRouter();
+  const path = usePayPath();
 
   const load = useCallback(async () => {
     try { setO(await api.order(id)); setError(null); } catch (e) { setError((e as Error).message); }
@@ -59,11 +65,34 @@ function Detail() {
     }
   }
 
+  // 토스: prepare(서버 금액·새 시도) → 결제창. 결과는 /payments/success|fail에서 승인·안내한다.
+  async function payToss() {
+    if (!o || inflight.current) return;
+    const blocked = await widget.check();
+    if (blocked) { setError(blocked); return; }
+    inflight.current = true;
+    setBusy(true);
+    setError(null);
+    try {
+      await widget.pay(await api.tossPrepare(o.order_id));
+    } catch (e) {
+      if (e instanceof TossRequestError && !isInputError(e.code)) { router.push(failHref(e)); return; }
+      const note = e instanceof TossRequestError ? e.message
+        : e instanceof ApiError && e.code === "ORDER_NOT_PAYABLE" ? "이미 처리된 주문입니다. 최신 상태를 불러왔습니다." : (e as Error).message;
+      await load();
+      setError(note);
+      inflight.current = false;
+      setBusy(false);
+    }
+  }
+
   // 남의 주문은 보여 주지 않는다(shop-api는 주문 조회에서 구매자를 대조하지 않으므로 화면에서도 막는다).
   const mine = !o || !user || o.buyer_id === user.id;
   const payable = o && (o.status === "pending_payment" || o.status === "payment_failed");
   const failed = o && o.status === "payment_failed" ? lastFailedPayment(o) : null;
   const guide = o && o.status === "payment_failed" ? failureGuide(failed?.failure_code) : null;
+  const toss = path === "toss";
+  const widget = useTossWidget(toss && !!payable && mine, payable ? o.total_amount : null);
 
   return (
     <RequireLogin user={user} ready={ready}>
@@ -73,6 +102,7 @@ function Detail() {
       {o && mine && (
         <div className="mt-3 space-y-6">
           {placed && <p role="status" className="rounded-lg bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800">주문이 접수되었습니다. 결제 상태를 확인해 보세요.</p>}
+          {payHint && payable && <p role="alert" className="rounded-lg bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800">아직 결제하지 않았어요. 아래에서 결제 정보를 고른 뒤 다시 결제해 주세요.</p>}
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="font-mono text-lg font-bold">{o.order_id}</h1>
             <span className={`chip ${ORDER_STATUS_TONE[o.status] ?? "bg-ink-100 text-ink-700"}`}>{ORDER_STATUS_KO[o.status] ?? o.status}</span>
@@ -122,7 +152,8 @@ function Detail() {
             </section>
           )}
 
-          {payable && (
+          {payable && toss && <TossWidgetBox widget={widget} />}
+          {payable && path === "fake" && (
             <div className="flex flex-wrap items-center gap-2" aria-label="결제 수단">
               {[["card", "카드"], ["transfer", "계좌이체"], ["easy_pay", "간편결제"]].map(([k, l]) => (
                 <button key={k} disabled={busy} onClick={() => setMethod(k)} aria-pressed={method === k}
@@ -132,7 +163,12 @@ function Detail() {
           )}
 
           <div className="flex flex-wrap gap-2">
-            {payable && <button className="btn-primary" disabled={busy} onClick={pay}>{busy ? "처리 중…" : o.status === "payment_failed" ? "다른 수단으로 다시 결제하기" : "결제하기"}</button>}
+            {payable && !toss && <button className="btn-primary" disabled={busy || path === "loading"} onClick={pay}>{busy ? "처리 중…" : o.status === "payment_failed" ? "다른 수단으로 다시 결제하기" : "결제하기"}</button>}
+            {payable && toss && (
+              <button className="btn-primary" disabled={busy || widget.status !== "ready"} onClick={payToss}>
+                {busy ? "결제창 여는 중…" : `${won(o.total_amount)} ${o.status === "payment_failed" ? "다시 결제하기" : "결제하기"}`}
+              </button>
+            )}
             {payable && <button className="btn-ghost" disabled={busy} onClick={() => act(() => api.cancel(o.order_id))}>주문 취소</button>}
             {axClaimTypes(o).length > 0 && <button className="btn-ghost" onClick={() => setClaimOpen(true)}>{o.delivered_at ? "반품·교환 신청" : "취소 신청"}</button>}
           </div>

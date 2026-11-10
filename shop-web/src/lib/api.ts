@@ -1,5 +1,5 @@
 import { SHOP_API_URL } from "./env";
-import type { Banner, CartPrice, Category, Claim, ClaimInput, DemoUser, Inquiry, InquiryInput, Order, OrderLineInput, Product } from "./types";
+import type { Banner, CartPrice, Category, Claim, ClaimInput, DemoUser, Inquiry, InquiryInput, Order, OrderLineInput, PaymentConfig, Product, TossPrepared } from "./types";
 
 // 판매 사이트 → shop-api(`/api/shop/*`)의 모든 호출은 이 파일 한 곳에 둔다.
 // 성공은 `{data, meta}`, 실패는 `{error: {code, message}}`. 로그인·토큰은 없고 구매자는 가명 ID(`buy_0001`…)다.
@@ -71,6 +71,12 @@ export const api = {
   placeOrder: (b: { buyer_id: string; items: OrderLineInput[]; points_used?: number }) => post<Order>("/api/shop/orders", b),
   /** 가짜 결제. 실패하면 주문이 `payment_failed`로 돌아오고 다시 결제할 수 있다. */
   pay: (orderId: string, method_code: string) => post<Order>(`/api/shop/orders/${encodeURIComponent(orderId)}/payments`, { method_code }),
+  /** 결제 방식(`fake`·`toss_test`). 키는 담기지 않는다. */
+  paymentConfig: () => request<PaymentConfig>("/api/shop/payment-config"),
+  /** 토스 테스트 결제 시도 만들기. 금액은 서버의 주문 합계(배송비 포함)이고 시도마다 `toss_order_id`가 새로 나온다. */
+  tossPrepare: (orderId: string) => post<TossPrepared>(`/api/shop/orders/${encodeURIComponent(orderId)}/payments/toss/prepare`),
+  /** 결제위젯 성공 리다이렉트 값으로 승인. 이미 끝난 시도는 처음 결과를 그대로 돌려준다(두 번 승인하지 않음). */
+  tossConfirm: (b: { toss_order_id: string; payment_key: string; amount: number }) => post<Order>("/api/shop/payments/toss/confirm", b),
   /** 결제 전(pending_payment·payment_failed) 주문만 취소된다. 결제 후 취소·환불은 클레임으로 한다. */
   cancel: (orderId: string) => post<Order>(`/api/shop/orders/${encodeURIComponent(orderId)}/cancel`, { reason_code: "buyer" }),
   /** 고객 신청 → shop-api → 고객지원. 금액은 보내지 않는다(고객지원이 주문 사실로 계산). */
