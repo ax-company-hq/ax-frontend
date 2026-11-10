@@ -1,5 +1,5 @@
 import { SHOP_API_URL } from "./env";
-import type { Banner, CartPrice, Category, Claim, ClaimInput, DemoUser, Inquiry, InquiryInput, Order, OrderLineInput, PaymentConfig, Product, TossPrepared } from "./types";
+import type { Banner, CartPrice, Category, Claim, ClaimInput, DemoUser, IdeaInput, Inquiry, InquiryInput, Order, OrderLineInput, PaymentConfig, Product, TossPrepared } from "./types";
 
 // 판매 사이트 → shop-api(`/api/shop/*`)의 모든 호출은 이 파일 한 곳에 둔다.
 // 성공은 `{data, meta}`, 실패는 `{error: {code, message}}`. 로그인·토큰은 없고 구매자는 가명 ID(`buy_0001`…)다.
@@ -84,6 +84,8 @@ export const api = {
 
   /** 1:1 문의 접수(토큰 없음). 주문이 필수이며 shop-api가 고객지원으로 넘긴다. 같은 내용을 10분 안에 다시 보내면 같은 접수로 처리된다. */
   submitInquiry: (b: InquiryInput) => post<Inquiry>("/api/shop/inquiries", b),
+  /** 고객의 소리: 문의·불만과 따로 접수된다. 글은 개인정보를 가려 저장되고 답변은 없다. */
+  submitIdea: (b: IdeaInput) => post<{ idea_id: string; received: boolean }>("/api/shop/ideas", b),
 
   /** 데모 구매자 목록(가명 ID + 표시용 이름). 적립금은 없다. */
   demoUsers: () => request<DemoUser[]>("/api/shop/users"),

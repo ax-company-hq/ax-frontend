@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "@/lib/nav";
 import { Empty, ErrorNote, NotReady, PageTitle, RequireLogin } from "@/components/shop/bits";
+import { VoiceForm } from "@/components/shop/VoiceForm";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { dateStr, won } from "@/lib/format";
@@ -152,6 +153,7 @@ export default function SupportPage() {
           </form>
         )}
         <div className="mt-4"><NotReady feature="문의 내역 조회" /></div>
+        {buyer && <VoiceForm buyer={buyer} />}
         <p className="mt-4 text-sm text-ink-500">주문과 관련한 신청은 <Link href="/orders" className="font-semibold text-brand-600 underline">주문·배송</Link>에서 하세요.</p>
       </RequireLogin>
     </div>

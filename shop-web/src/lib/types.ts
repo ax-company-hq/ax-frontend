@@ -34,6 +34,9 @@ export type ClaimType = "cancel" | "return" | "exchange";
 export type ClaimReason = "change_of_mind" | "defect" | "wrong_item" | "damaged" | "missing_item" | "late_delivery" | "other";
 export type ClaimStatus = "needs_info" | "needs_review" | "awaiting_return" | "return_received" | "approved" | "completed" | "rejected";
 
+export type IdeaKind = "event" | "feature" | "improvement" | "product" | "other";
+export interface IdeaInput { buyer_id: string; kind: IdeaKind; text: string }
+
 export interface ClaimInput {
   buyer_id: string; customer_name: string; order_id: string; type: ClaimType; reason: ClaimReason;
   items?: { order_item_id: string; qty: number }[]; unsealed?: boolean; evidence_count?: number; description?: string;
