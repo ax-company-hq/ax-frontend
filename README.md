@@ -30,6 +30,8 @@ npm run build             # 앱 빌드
 
 백엔드까지 함께 띄우려면 두 레포를 같은 폴더에 나란히 clone하고, `ax-backend`에서 `docker compose -f infra/compose.yml up`을 실행한다.
 
+게이트웨이(`nginx/`)의 shop-api 주소는 컨테이너 환경 변수 `SHOP_API_UPSTREAM`으로 바꾼다(기본 `http://shop-api:8010`, 다시 빌드할 필요 없음).
+
 ## 통합 에이전트 시연 콘솔 접속 (터미널 2개)
 
 통합 에이전트(총괄) 시연 콘솔은 총괄 백엔드가 떠 있어야 동작한다. 자세한 설명과 문제 해결은 [`orchestrator-web/README.md`](orchestrator-web/README.md).

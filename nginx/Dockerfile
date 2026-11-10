@@ -49,6 +49,10 @@ FROM nginx:1.27-alpine
 COPY --from=build /app/shop-web/dist /srv/shop
 COPY --from=build /app/dashboard-web/dist /srv/admin
 COPY --from=build /app/planning-web/dist /srv/planning
-COPY nginx/gateway.conf /etc/nginx/conf.d/default.conf
+# gateway.conf는 템플릿이다: 공식 이미지가 시작할 때 /etc/nginx/templates/*.template을 envsubst로 채워 conf.d/에 쓴다.
+# 필터로 SHOP_API_UPSTREAM만 바꾼다($host·$uri 같은 nginx 변수는 그대로 둔다)
+ENV SHOP_API_UPSTREAM=http://shop-api:8010 \
+    NGINX_ENVSUBST_FILTER=^SHOP_API_UPSTREAM$
+COPY nginx/gateway.conf /etc/nginx/templates/default.conf.template
 EXPOSE 80
 HEALTHCHECK --interval=30s --timeout=3s CMD wget -qO- http://127.0.0.1/healthz || exit 1
