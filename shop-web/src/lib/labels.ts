@@ -8,6 +8,9 @@ export const STYLE_KO: Record<string, string> = { empathetic: "공감형", conci
 export const STATUS_KO: Record<string, string> = { open: "진행 중", resolved: "해결", escalated: "이관" };
 export const URGENCY_DOT: Record<string, string> = { high: "bg-red-500", medium: "bg-amber-400", low: "bg-emerald-400" };
 
+export const IDEA_KIND_KO: Record<string, string> = { event: "이벤트·혜택", feature: "새 기능", improvement: "개선", product: "상품", other: "기타" };
+export const IDEA_STATUS_KO: Record<string, string> = { pending: "접수됨", received: "전달됨", redirected: "1:1 문의로 남겨 주세요", not_accepted: "받지 못함" };
+
 export const CLAIM_TYPE_KO: Record<string, string> = { cancel: "주문 취소", return: "반품", exchange: "교환", compensation: "보상" };
 export const CLAIM_REASON_KO: Record<string, string> = {
   change_of_mind: "단순변심", defect: "상품 불량", wrong_item: "오배송", damaged: "배송 중 파손",
