@@ -30,6 +30,14 @@ export interface Order {
 export interface InquiryInput { buyer_id: string; order_id: string; subject?: string; body: string }
 export interface Inquiry { id: number | string; status: string; order_id: string; updated_at: string }
 
+// ---------------------------------------------------------------- ideas (고객의 소리)
+export type IdeaKind = "event" | "feature" | "improvement" | "product" | "other";
+export interface IdeaInput { buyer_id: string; kind: IdeaKind; text: string }
+export interface IdeaReceipt { idea_id: number; received: boolean }
+/** pending: 고객지원이 아직 안 읽음 · received: 받음 · redirected: 문의로 남겨야 함 · not_accepted: 받지 않음 */
+export type IdeaStatus = "pending" | "received" | "redirected" | "not_accepted";
+export interface MyIdea { idea_id: number; kind: IdeaKind; preview: string; status: IdeaStatus; notice: string | null; created_at: string }
+
 export interface OrderLineInput { product_id: string; qty: number }
 
 // ---------------------------------------------------------------- claims
