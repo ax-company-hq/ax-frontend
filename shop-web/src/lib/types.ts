@@ -32,7 +32,17 @@ export interface OrderLineInput { product_id: string; qty: number }
 // ---------------------------------------------------------------- claims
 export type ClaimType = "cancel" | "return" | "exchange";
 export type ClaimReason = "change_of_mind" | "defect" | "wrong_item" | "damaged" | "missing_item" | "late_delivery" | "other";
-export type ClaimStatus = "needs_info" | "needs_review" | "awaiting_return" | "return_received" | "approved" | "completed" | "rejected";
+// received: 판매 서버에 접수만 됨(고객지원이 아직 읽지 않았거나 판정 전), not_accepted: 클레임으로 받지 않음
+export type ClaimStatus = "received" | "needs_info" | "needs_review" | "awaiting_return" | "return_received" | "approved" | "completed" | "rejected" | "not_accepted";
+
+/** 신청 직후 돌려받는 접수증. 판정·환불액은 없다(AXcellent가 읽어 간 뒤 결과가 적힌다). */
+export interface ClaimReceipt {
+  id: number; context_id: string; status: ClaimStatus; order_id: string; type: ClaimType; reason: ClaimReason; created_at: string;
+}
+/** 내 신청: 접수증에 AXcellent가 적어 준 결과(없으면 null)가 붙는다. */
+export interface MyClaim extends ClaimReceipt {
+  updated_at: string; result: (Partial<Claim> & { message?: string }) | null;
+}
 
 export interface ClaimInput {
   buyer_id: string; customer_name: string; order_id: string; type: ClaimType; reason: ClaimReason;
