@@ -1,59 +1,99 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { ErrorNote } from "@/components/shop/bits";
 import { api, ApiError } from "@/lib/api";
-import { shortDateTime } from "@/lib/format";
+import { codePoints, shortDateTime } from "@/lib/format";
 import { IDEA_KIND_KO, IDEA_STATUS_KO } from "@/lib/labels";
-import type { IdeaKind, MyIdea } from "@/lib/types";
+import type { IdeaKind, IdeaStatus, MyIdea } from "@/lib/types";
 
-// 서버 한도(shop-api: 500자, 하루 5건)와 같다. 서버 검증이 최종이고 화면은 먼저 막기만 한다.
+// 서버 한도(shop-api: 500자)와 같다. 서버 검증이 최종이고 화면은 먼저 막기만 한다.
 const MAX_TEXT = 500;
-const PREVIEW_CHARS = 30; // 내역에는 앞부분 30자만 온다(서버가 원문 사본을 지운다)
 const KINDS = Object.keys(IDEA_KIND_KO) as IdeaKind[];
-// 고객지원이 읽어 가 처리하기 전(접수됨)에는 주기적으로 다시 읽는다.
+// 고객지원이 읽어 가 처리하기 전(접수됨)에는 주기적으로 다시 읽는다. 2분쯤 지나도 그대로면 멈추고
+// 고객이 직접 다시 불러오게 한다(고객지원이 꺼져 있거나 관찰 모드면 계속 읽어도 달라지지 않는다).
 const REFRESH_MS = 8_000;
-
-const count = (s: string) => [...s].length;
+const MAX_POLLS = 15;
 
 function ideaErrorText(e: unknown): string {
   const generic = "의견을 접수하지 못했습니다. 잠시 후 다시 시도해 주세요.";
   if (!(e instanceof ApiError)) return generic;
-  if (e.code === "RATE_LIMITED") return "오늘 보낼 수 있는 의견 수를 넘었습니다. 내일 다시 보내 주세요.";
-  if (e.status === 0) return "판매 서버에 연결할 수 없어 의견을 접수하지 못했습니다. 잠시 후 다시 시도해 주세요.";
-  if (e.status === 422) return "의견은 1자 이상 " + MAX_TEXT + "자 이하로 입력해 주세요.";
-  return generic;
+  switch (e.code) {
+    // shop-api의 제한은 1분 창이다(구매자당 5건, 전체 60건). 하루 한도와는 다른 제한이다.
+    case "RATE_LIMITED": return "짧은 시간에 너무 많이 보냈습니다. 잠시 후 다시 보내 주세요.";
+    case "INVALID_BUYER_ID": return "구매자 정보가 올바르지 않습니다. 구매자를 다시 선택해 주세요.";
+    default:
+      if (e.status === 0) return "판매 서버에 연결할 수 없어 의견을 접수하지 못했습니다. 잠시 후 다시 시도해 주세요.";
+      if (e.status === 422) return "의견은 1자 이상 " + MAX_TEXT + "자 이하로 입력해 주세요.";
+      return generic;
+  }
 }
 
-/** 내 의견 내역. 접수된 뒤 고객지원이 읽어 가기까지 잠시 걸리므로, 처리 전 항목이 있으면 다시 읽는다. */
-function useMyIdeas(buyerId: string) {
-  const [ideas, setIdeas] = useState<MyIdea[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const reload = useCallback(async () => {
-    try {
-      setIdeas(await api.myIdeas(buyerId));
-      setError(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "내역을 불러오지 못했습니다.");
-    }
-  }, [buyerId]);
-  useEffect(() => { void reload(); }, [reload]);
-  const waiting = !!ideas?.some((i) => i.status === "pending");
-  useEffect(() => {
-    if (!waiting) return;
-    const t = setInterval(() => { void reload(); }, REFRESH_MS);
-    return () => clearInterval(t);
-  }, [waiting, reload]);
-  return { ideas, error, reload };
+// 내역을 못 불러올 때도 서버 주소 같은 개발자용 안내는 고객에게 보이지 않는다.
+function loadErrorText(e: unknown): string {
+  if (e instanceof ApiError && e.status === 0) return "판매 서버에 연결할 수 없어 내역을 불러오지 못했습니다. 잠시 후 다시 확인해 주세요.";
+  return "내역을 불러오지 못했습니다. 잠시 후 다시 확인해 주세요.";
 }
 
-const BADGE: Record<string, string> = {
+const BADGE: Record<IdeaStatus, string> = {
   pending: "bg-ink-100 text-ink-700",
   received: "bg-emerald-50 text-emerald-800",
   redirected: "bg-amber-50 text-amber-900",
   not_accepted: "bg-red-50 text-red-800",
 };
 
+/** 내 의견 내역. 마지막으로 보낸 읽기 요청의 응답만 반영하고, 구매자가 바뀌면 옛 응답을 버린다. */
+function useMyIdeas(buyerId: string) {
+  const [ideas, setIdeas] = useState<MyIdea[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [stalled, setStalled] = useState(false);
+  const [epoch, setEpoch] = useState(0);
+  const latest = useRef(0);
+  const polls = useRef(0);
+
+  const reload = useCallback(async () => {
+    const mine = ++latest.current;
+    try {
+      const list = await api.myIdeas(buyerId);
+      if (mine !== latest.current) return; // 더 나중 요청이 있으면 이 응답은 버린다
+      setIdeas(list);
+      setError(null);
+    } catch (e) {
+      if (mine === latest.current) setError(loadErrorText(e));
+    }
+  }, [buyerId]);
+
+  // 구매자가 바뀌면 이전 구매자의 목록·응답을 지우고 새로 읽는다
+  useEffect(() => {
+    latest.current += 1;
+    setIdeas(null);
+    setError(null);
+    void reload();
+  }, [buyerId, reload]);
+
+  const waiting = !!ideas?.some((i) => i.status === "pending");
+  useEffect(() => {
+    if (!waiting) { polls.current = 0; setStalled(false); return; }
+    const t = setInterval(() => {
+      if (document.hidden) return; // 보이지 않는 탭에서는 읽지 않는다
+      polls.current += 1;
+      if (polls.current > MAX_POLLS) { setStalled(true); clearInterval(t); return; }
+      void reload();
+    }, REFRESH_MS);
+    return () => clearInterval(t);
+  }, [waiting, reload, epoch]);
+
+  /** 새 의견을 보냈거나 고객이 직접 다시 불러올 때: 횟수를 처음부터 센다 */
+  const refresh = useCallback(() => {
+    polls.current = 0;
+    setStalled(false);
+    setEpoch((n) => n + 1);
+    return reload();
+  }, [reload]);
+
+  return { ideas, error, stalled, refresh };
+}
+
 export function IdeaBox({ buyerId }: { buyerId: string }) {
-  const { ideas, error, reload } = useMyIdeas(buyerId);
+  const { ideas, error, stalled, refresh } = useMyIdeas(buyerId);
   const [kind, setKind] = useState<IdeaKind>("feature");
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
@@ -61,7 +101,7 @@ export function IdeaBox({ buyerId }: { buyerId: string }) {
   const [done, setDone] = useState(false);
   const inflight = useRef(false);
 
-  const len = count(text.trim());
+  const len = codePoints(text.trim());
   const over = len > MAX_TEXT;
   const canSend = len > 0 && !over && !sending;
 
@@ -76,7 +116,7 @@ export function IdeaBox({ buyerId }: { buyerId: string }) {
       await api.submitIdea({ buyer_id: buyerId, kind, text: text.trim() });
       setText("");
       setDone(true);
-      void reload();
+      void refresh();
     } catch (e) {
       // 의견 원문은 콘솔·저장소에 남기지 않는다. 오류 코드로 만든 안내만 보여 준다.
       setFormError(ideaErrorText(e));
@@ -91,7 +131,7 @@ export function IdeaBox({ buyerId }: { buyerId: string }) {
       <div>
         <h2 id="idea-title" className="font-semibold">고객의 소리</h2>
         <p className="mt-1 text-xs text-ink-500">
-          이벤트·새 기능·개선 아이디어를 남겨 주세요. 하루 5건까지 받습니다. 환불·취소·불량 같은 문제는 위의 1:1 문의나 주문 상세에서 신청해 주세요.
+          이벤트·새 기능·개선 아이디어를 남겨 주세요. 의견은 하루 5건까지 처리하고, 넘은 의견은 접수된 뒤 내역에 "받지 못함"으로 표시됩니다. 환불·취소·불량 같은 문제는 위의 1:1 문의나 주문 상세에서 신청해 주세요.
         </p>
       </div>
       <form onSubmit={submit} className="space-y-3" aria-busy={sending}>
@@ -120,19 +160,22 @@ export function IdeaBox({ buyerId }: { buyerId: string }) {
       </form>
 
       <div>
-        <h3 className="mb-2 text-sm font-semibold">내가 보낸 의견</h3>
+        <h3 className="mb-2 text-sm font-semibold">내가 보낸 의견 <span className="font-normal text-ink-500">(앞부분 30자만 보여 드려요)</span></h3>
         <ErrorNote error={error} />
+        {(error || stalled) && (
+          <button type="button" className="btn-ghost mb-2" onClick={() => { void refresh(); }}>다시 불러오기</button>
+        )}
+        {stalled && <p className="mb-2 text-xs text-ink-500">아직 확인 중인 의견이 있습니다. 잠시 뒤에 다시 불러와 주세요.</p>}
         {ideas === null && !error && <p className="text-sm text-ink-500">불러오는 중…</p>}
         {ideas?.length === 0 && <p className="text-sm text-ink-500">아직 보낸 의견이 없습니다.</p>}
         <ul className="space-y-2">
           {ideas?.map((i) => (
             <li key={i.idea_id} className="rounded-lg border border-ink-100 px-3 py-2 text-sm">
               <div className="flex flex-wrap items-center gap-2">
-                <span className={"rounded-full px-2 py-0.5 text-xs font-semibold " + (BADGE[i.status] ?? BADGE.pending)}>{IDEA_STATUS_KO[i.status] ?? i.status}</span>
-                <span className="text-xs text-ink-500">{IDEA_KIND_KO[i.kind] ?? i.kind} · #{i.idea_id} · {shortDateTime(i.created_at)}</span>
+                <span className={"rounded-full px-2 py-0.5 text-xs font-semibold " + BADGE[i.status]}>{IDEA_STATUS_KO[i.status]}</span>
+                <span className="text-xs text-ink-500">{IDEA_KIND_KO[i.kind]} · #{i.idea_id} · {shortDateTime(i.created_at)}</span>
               </div>
-              {/* 내역에는 앞부분만 있다. 서버가 보낸 처리 안내가 있으면 그대로 보여 준다 */}
-              <p className="mt-1 text-ink-700">{i.preview}{[...i.preview].length >= PREVIEW_CHARS ? "…" : ""}</p>
+              <p className="mt-1 text-ink-700">{i.preview}</p>
               {i.notice && <p className="mt-1 text-xs text-ink-500">{i.notice}</p>}
             </li>
           ))}
