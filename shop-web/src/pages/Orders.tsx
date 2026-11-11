@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "@/lib/nav";
 import { AxClaimDialog, axClaimTypes } from "@/components/shop/AxClaimDialog";
-import { MyClaimCard, useMyClaims } from "@/components/shop/MyClaimCard";
+import { ClaimsLoadError, MyClaimCard, useMyClaims } from "@/components/shop/MyClaimCard";
 import { Empty, ErrorNote, NotReady, PageTitle, RequireLogin } from "@/components/shop/bits";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -15,7 +15,7 @@ export default function OrdersPage() {
   const [target, setTarget] = useState<Order | null>(null);
   const [error, setError] = useState<string | null>(null);
   const buyer = user?.id;
-  const { claims, reload: reloadClaims } = useMyClaims(buyer);
+  const { claims, failed: claimsFailed, reload: reloadClaims } = useMyClaims(buyer);
 
   useEffect(() => {
     if (!buyer) return;
@@ -35,6 +35,7 @@ export default function OrdersPage() {
     <RequireLogin user={user} ready={ready}>
       <PageTitle title="주문·배송" sub={`${buyer} 구매자의 주문입니다. 취소·반품·교환 신청은 고객지원 → 안전 → 재무로 이어집니다.`} right={<Link href="/support" className="btn-ghost text-sm">1:1 문의</Link>} />
       <ErrorNote error={error} />
+      <ClaimsLoadError failed={claimsFailed} onRetry={() => { void reloadClaims(); }} />
       {orders && orders.length === 0 && <Empty>주문 내역이 없습니다. <Link href="/products" className="font-semibold text-brand-600 underline">쇼핑하러 가기</Link></Empty>}
       <ul className="space-y-4">
         {(orders ?? []).map((o) => (

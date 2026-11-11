@@ -24,14 +24,21 @@ export function AxClaimStatusBadge({ status }: { status: ClaimStatus }) {
 export function AxClaimSummary({ c }: { c: Partial<Claim> & Pick<Claim, "status"> }) {
   const lines = c.lines ?? [];
   const reasons = c.reasons ?? [];
+  // 결과에 아직 없는 금액은 0원으로 채우지 않고 칸을 뺀다(정보 필요 같은 중간 결과)
+  const amounts: Array<[string, number]> = [];
+  if (c.expected_refund != null) amounts.push(["환불 예정", c.expected_refund]);
+  if (c.points_back != null) amounts.push(["적립금 반환", c.points_back]);
+  if (c.refund_paid != null) amounts.push(["환불 완료", c.refund_paid]);
   return (
     <div className="rounded-xl border border-ink-100 bg-surface-2 p-4 text-sm">
       {c.resolution && <p className="font-semibold">{c.resolution}</p>}
-      <dl className="mt-3 grid grid-cols-3 gap-2 text-center">
-        <div className="rounded-lg bg-surface p-2"><dt className="text-[11px] text-ink-500">환불 예정</dt><dd className="mt-0.5 font-bold tabular-nums">{won(c.expected_refund ?? 0)}</dd></div>
-        <div className="rounded-lg bg-surface p-2"><dt className="text-[11px] text-ink-500">적립금 반환</dt><dd className="mt-0.5 font-bold tabular-nums">{won(c.points_back ?? 0)}</dd></div>
-        <div className="rounded-lg bg-surface p-2"><dt className="text-[11px] text-ink-500">환불 완료</dt><dd className="mt-0.5 font-bold tabular-nums">{won(c.refund_paid ?? 0)}</dd></div>
-      </dl>
+      {amounts.length > 0 && (
+        <dl className="mt-3 grid grid-cols-3 gap-2 text-center">
+          {amounts.map(([label, value]) => (
+            <div key={label} className="rounded-lg bg-surface p-2"><dt className="text-[11px] text-ink-500">{label}</dt><dd className="mt-0.5 font-bold tabular-nums">{won(value)}</dd></div>
+          ))}
+        </dl>
+      )}
       {lines.length > 0 && (
         <ul className="mt-3 space-y-1 text-xs text-ink-700">
           {lines.map((l) => (
@@ -48,7 +55,7 @@ export function AxClaimSummary({ c }: { c: Partial<Claim> & Pick<Claim, "status"
         </ul>
       )}
       {c.requires_return && c.status === "awaiting_return" && <p className="mt-3 rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-700">상품을 반품한 뒤 물류센터에서 입고가 확인되면 환불됩니다.</p>}
-      <p className="mt-2 font-mono text-[10px] text-ink-500">사건 {c.context_id}</p>
+      {c.context_id && <p className="mt-2 font-mono text-[10px] text-ink-500">사건 {c.context_id}</p>}
     </div>
   );
 }

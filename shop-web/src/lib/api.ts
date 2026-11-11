@@ -103,7 +103,7 @@ export const api = {
   cartPrice: (items: OrderLineInput[], pointsUsed = 0) => post<CartPrice>("/api/shop/cart/price", { items, points_used: pointsUsed }),
 
   // --- shop-api에 아직 없는 것: ax-backend#385 결과로 연결 --------------------
-  // TODO(ax-backend#385): 클레임 환불액 미리보기, 신청 내역 조회·철회·사진 추가
+  // TODO(ax-backend#385): 클레임 환불액 미리보기, 신청 철회·사진 추가
   previewClaim: (_b: ClaimInput) => notReady<never>("환불액 미리보기"),
   // TODO(ax-backend#385): 문의 내역 조회(shop-api에 목록 API 없음)
   inquiryHistory: (_buyerId: string) => notReady<never>("문의 내역 조회"),

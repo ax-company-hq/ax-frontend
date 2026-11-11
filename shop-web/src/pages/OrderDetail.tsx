@@ -2,7 +2,7 @@ import { Link } from "@/lib/nav";
 import { useParams, useRouter, useSearchParams } from "@/lib/nav";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { AxClaimDialog, axClaimTypes } from "@/components/shop/AxClaimDialog";
-import { MyClaimCard, useMyClaims } from "@/components/shop/MyClaimCard";
+import { ClaimsLoadError, MyClaimCard, useMyClaims } from "@/components/shop/MyClaimCard";
 import { ErrorNote, NotReady, RequireLogin } from "@/components/shop/bits";
 import { Cover } from "@/components/shop/Cover";
 import { TossWidgetBox } from "@/components/shop/TossWidgetBox";
@@ -32,7 +32,7 @@ function Detail() {
   const inflight = useRef(false); // 결제 요청 중 플래그: state 반영 전의 연속 클릭도 막는다
   const router = useRouter();
   const path = usePayPath();
-  const { claims, reload: reloadClaims } = useMyClaims(user?.id, id);
+  const { claims, failed: claimsFailed, reload: reloadClaims } = useMyClaims(user?.id, id);
 
   const load = useCallback(async () => {
     try { setO(await api.order(id)); setError(null); } catch (e) { setError((e as Error).message); }
@@ -173,6 +173,7 @@ function Detail() {
             {axClaimTypes(o).length > 0 && <button className="btn-ghost" onClick={() => setClaimOpen(true)}>{o.delivered_at ? "반품·교환 신청" : "취소 신청"}</button>}
           </div>
 
+          <ClaimsLoadError failed={claimsFailed} onRetry={() => { void reloadClaims(); }} />
           {claims.map((c) => <MyClaimCard key={c.id} c={c} />)}
           {/* TODO(ax-backend#385): 신청 철회·사진 추가, 후기 작성 API가 생기면 연결한다 */}
           <NotReady feature="신청 철회, 후기 작성" />

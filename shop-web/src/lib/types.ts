@@ -40,7 +40,8 @@ export type ClaimStatus = "received" | "needs_info" | "needs_review" | "awaiting
 
 /** 신청 직후 돌려받는 접수증. 판정·환불액은 없다(AXcellent가 읽어 간 뒤 결과가 적힌다). */
 export interface ClaimReceipt {
-  id: number; context_id: string; status: ClaimStatus; order_id: string; type: ClaimType; reason: ClaimReason; created_at: string;
+  // context_id는 접수 응답의 meta에 있어 data에는 없을 수 있다
+  id: number; context_id?: string; status: ClaimStatus; order_id: string; type: ClaimType; reason: ClaimReason; created_at: string;
 }
 /** 내 신청: 접수증에 AXcellent가 적어 준 결과(없으면 null)가 붙는다. */
 export interface MyClaim extends ClaimReceipt {
